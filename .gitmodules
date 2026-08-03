@@ -1,0 +1,3 @@
+[submodule "common-elf-reader"]
+	path = common-elf-reader
+	url = /home/dan/Downloads/GIT/elf32_read_parse.git
