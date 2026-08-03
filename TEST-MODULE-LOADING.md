@@ -110,6 +110,24 @@ int   dl::dlclose(void* handle);
 `DL_LIB_DIR` (an absolute path to `test/fixtures`, injected by the build) makes
 the semihosting reads independent of the OpenOCD working directory.
 
+**Concrete example (semihosting, `scl-fw-dyn1`):**
+
+```cpp
+void* h = dl::dlopen(DL_LIB_DIR "/mylib1.so", RTLD_NOW);   // DL_LIB_DIR="…/test/fixtures"
+```
+
+- **BEFORE the call** — the 3.9 KB `mylib1.so` ELF lives on the **host
+  filesystem** (`test/fixtures/mylib1.so`), **not on the target**. The target
+  has no copy; OpenOCD's semihosting serves it on demand via `SYS_OPEN` +
+  `SYS_READ`.
+- **AFTER the call** — `dlopen_source` allocates a slot in the 64 KB
+  `_simage_arena` (RAM `0x20000000`–`0x20020000`, reserved after the firmware's
+  `.data/.bss`, e.g. near `0x20001000`), **copies every `PT_LOAD` segment there
+  (text + rodata + data + GOT)**, relocates the GOT (main-imports point into
+  firmware RAM, data slots rebased to the new base), records
+  `h->base` / `h->got_base`, and runs `.init_array`. `dl::dlsym`/`dl::dlclose`
+  now operate on RAM addresses inside that slot.
+
 ---
 
 ## 3. Loading from the ON-CHIP FLASH flat-filesystem
@@ -160,6 +178,22 @@ loader::result<handle*> dlopen_fs(const char* name) noexcept {
 - `test-dynamic/test-dynamic-nolib/test3/src/main-flatfs.cpp` — provisions
   fixtures via semihosting, then `battery_run()` loads them with `dlopen_fs`.
 - Routed automatically by `scl_impl_dlopen` when `g_use_flatfs == true`.
+
+**Concrete example (on-chip flash, `scl-fw-flatfs`):**
+
+```cpp
+auto h = fw::dlopen_fs("c2.so");          // battery open_sel when g_use_flatfs
+```
+
+- **BEFORE the call** — during provisioning `flash-prog.c` wrote the flatfs
+  archive into the **on-chip flash** at `0x0804xxxx` (memory-mapped region).
+  `fw::fs_find("c2.so")` returns the `FsEntry` (name/offset/size/CRC), and
+  `fw::fs_blob(e)` returns a `std::byte*` **pointing into flash itself**.
+- **AFTER the call** — `Flashbyte_source` wraps that flash pointer (reading is
+  a plain `memcpy` from the bus at `0x08xxxxxx`), and `dlopen_source` copies the
+  image **out of flash into a RAM arena slot** (copy-whole, like semihosting):
+  text, data and GOT all move to RAM, GOT relocated, `.init_array` run. The
+  flash blob is left untouched and reusable by the next `dlopen_fs`.
 
 ---
 
@@ -219,6 +253,23 @@ loader::result<handle*> dlopen_fs(const char* name) noexcept {
 - `test-relocatable` → `scl-fw-classic-spi-reloc` loads ET_REL `.rel.o` from SPI
 - `test-xip/test-xip-static/spi-flash` uses SPI flash as **transit storage**
   (provisions to SPI, then copies into internal flash for XIP — see §5).
+
+**Concrete example (SPI flash, `scl-fw-flatfs-spi`):**
+
+```cpp
+auto h = fw::dlopen_fs("c2.so");
+```
+
+- **BEFORE the call** — the archive was formatted and the fixtures written to
+  the **external W25Q64 SPI flash**. `fw::fs_find("c2.so")` returns an entry
+  whose `e->off` (e.g. `0x0000A2C0`, just past the 2 KB TOC) and `e->size`
+  locate the blob. The W25Q64 is **not memory-mapped**: no byte is reachable
+  until `spi_flash_read(e->off, …)` clocks it out over SPI (bit-banged GPIO).
+- **AFTER the call** — `spi_flash_reinit()` re-inits the GPIO SPI, then
+  `SpiByteSource::read_at` fetches the blob over SPI in chunks as
+  `dlopen_source` pulls each segment; the image is **copied into a RAM arena
+  slot** (text + data + GOT), GOT relocated, `.init_array` run — identical to
+  the semihosting/on-chip end result, only the transport differed.
 
 ---
 
@@ -300,6 +351,29 @@ loader::result<void> fs_add(const char* name, const void* data, std::uint32_t le
 (`scl-fw-xip-nolib1`, `scl-fw-xip-newlib1`, `scl-fw-xip-static*`,
 `scl-fw-xip-interrupt*`, `scl-fw-xip-static-spi-flash`).
 
+**Concrete example (XIP, `scl-fw-xip-static-direct`):**
+
+```cpp
+scl::Module m;
+m.load_buf(flash_blob, e->size, buf, bufsz, syms);   // flash_blob = fw_int::fs_blob(e)
+uint32_t r = call_sym1(m, "s_apply", 3);
+```
+
+- **BEFORE the call** — the module is a split `R-X | RW` ELF blob **already in
+  internal flash** (provisioned via the SPI-transit pipeline). `fs_blob(e)`
+  points into the memory-mapped flash; nothing is in RAM yet except the
+  caller's staging buffer.
+- **AFTER the call** — `SegmentMap` splits the image and only the **RW segment
+  (GOT + `.data` + `.bss`) is copied to RAM**, while the **text/R-X segment
+  stays in flash and executes in place**. Observed placement from
+  `doc/xip-plt-prelink.md`:
+  - text base (flash) = `0x08041374`
+  - data base (RAM)   = `0x20009470`
+  - got base / r10    = `0x200094e8`
+  `call_sym*` returns an address that is either a **flash** address (code) or a
+  **RAM** address (data); calling the flash address proves XIP. Only the RW
+  bytes moved; the code never did.
+
 ---
 
 ## 6. Other loaders in this workspace
@@ -318,6 +392,21 @@ class dynamic_linker {
 - **Source:** `src/dynamic-newlib/dynamic-linker.cpp`
 - **Used by:** `test-dynamic/test-dynamic-newlib/test1|2` (over `semihost_file`).
 
+**Concrete example (hosted, `scl-fw-dynamic-newlib1`):**
+
+```cpp
+fw::semihost_file src = *fw::semihost_file::open(DL_LIB_DIR "/mylib1.so");
+loader::library* lib = dyn.load_from_source(src);
+```
+
+- **BEFORE the call** — `mylib1.so` is on the **host** filesystem, served by
+  semihosting; only a file handle + size exist on the target.
+- **AFTER the call** — the image and its patch journal are allocated on the
+  **newlib heap** (RAM, via `malloc`/`new`), relocated against main's `.dynsym`
+  (parsed from `_DYNAMIC`), GOT patched with a **journal that can revert** the
+  patch on `dlclose`, and `.init_array` run. The returned `library*` points into
+  heap RAM.
+
 ### 6.2 ET_REL module loader (`scl::reloc`)
 Loads non-PIC `-mlong-calls -fno-pic -r` ET_REL objects (no GOT/PLT) from raw
 spans:
@@ -335,6 +424,26 @@ std::uint32_t sym(const module_set& s, std::string_view name) noexcept;
 - **Used by:** `test-relocatable` — `scl-fw-reloc`/`classic` (semihosting),
   `scl-fw-classic-spi-reloc` (SPI flash), `scl-fw-reloc-interrupt`.
 
+**Concrete example (ET_REL, `scl-fw-reloc`):**
+
+```cpp
+// c1.rel.o bytes read over semihosting into g_img[0]
+loader::symbol_source rs{ main_resolve, nullptr };
+auto set = reloc::load_set(span_of_spans, std::span(g_arena), rs);
+uint32_t a = reloc::sym(set, "c1_add");
+```
+
+- **BEFORE the call** — each `.rel.o` is a raw **span of bytes** held in a
+  staging buffer `g_img[i]` (fetched from the host over semihosting, or from
+  SPI flash in `classic-spi`); it has **no GOT/PLT/r10** — it is a plain
+  `-mlong-calls -fno-pic -r` relocatable object.
+- **AFTER the call** — `load_set` **links the group into the caller-provided
+  `g_arena`** (RAM): it places each module's sections there, resolves and
+  applies `R_ARM_ABS32`/`TARGET1`/`REL32`/`THM_CALL` relocations (including
+  cross-module cycles), and runs `.init_array`. `reloc::sym` returns addresses
+  inside `g_arena`. Nothing is left in the staging buffer but the original
+  object bytes (reusable).
+
 ### 6.3 Standalone static patcher (`scl::static`)
 The original `elf_reader`/`shlib_loader`/`Module` API — loads a whole copy-into-RAM
 image from a path or a RAM buffer:
@@ -350,6 +459,23 @@ class Module {
 ```
 - **Source:** `src/static/module.cpp`, `src/static/shlib-loader.cpp`, `src/static/elf-reader.cpp`
 - **Used by:** `test-static/test-static*` (`f411ce-sh`), `test-static/test-drv`.
+
+**Concrete example (static patcher, `f411ce-sh`):**
+
+```cpp
+uint8_t buf[64 * 1024];
+scl::Module m;
+m.load_file("libsh1/libsh1.so", buf, sizeof(buf), syms);
+void* fn = m.sym("library_function");
+```
+
+- **BEFORE the call** — `libsh1/libsh1.so` is on the **host** (semihosting),
+  or already in a RAM buffer (`load_buf`); the target only holds the provided
+  `buf`.
+- **AFTER the call** — the loader parses via `elf_reader`, **patches the
+  library's GOT and main's GOT** (both sides), relocates and copies the whole
+  image into the caller's `buf` (RAM), and runs constructors. `m.sym()`
+  resolves to RAM addresses inside `buf`.
 
 ---
 
