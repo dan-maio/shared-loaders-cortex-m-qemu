@@ -49,11 +49,14 @@ what**. It is a clean separation between a **general, reusable library** and
 **`common-elf-reader/` — the general library (storage-agnostic).**
 
 - It owns the **abstract contract** `loader::byte_source`
-  (`common-elf-reader/include/loader/byte-source.hpp`).
-- It owns the **consumer** of that contract — the ELF loader
-  (`fw::dlopen_source`, `elf_image::parse`, `Module::build`), which only ever
-  calls `size()` / `read_at()` and never knows or cares where the bytes come
-  from.
+  (`common-elf-reader/include/loader/byte-source.hpp`). This class is **pure
+  virtual**: it has no implementation, so by itself it does **no work** at all —
+  it only declares *what* a reader must provide (`size()` and `read_at()`).
+- It owns the **consumer** of that contract — the concrete ELF loader code
+  (`elf_image::parse` in `common-elf-reader/src/`, `fw::dlopen_source` in
+  `src/dynamic-nolib/dl.cpp`, `Module::build` in `src/static/module.cpp`),
+  which calls `size()` / `read_at()` and does the **parse + link work** from the
+  bytes those calls return.
 - It also ships the **generic host readers** that are useful everywhere
   (`loader::memory_byte_source`, `loader::fd_byte_source`).
 - It contains **no board code, no probe code, no flash driver, no test
@@ -63,7 +66,8 @@ what**. It is a clean separation between a **general, reusable library** and
 
 - Each test that needs a new storage medium **derives its own class** from the
   library's abstract `loader::byte_source` and implements `size()` +
-  `read_at()` for that medium only.
+  `read_at()`. **The `read_at()` bodies are the only place the bytes are
+  actually fetched** — the abstract base contributes nothing to that.
 - The freestanding platform contributes `fw::semihost_file` (semihosting reader)
   in `test/platforms/…`.
 - The flatfs test contributes `fw::Flashbyte_source` (on-chip flash) in
@@ -71,11 +75,12 @@ what**. It is a clean separation between a **general, reusable library** and
 - The SPI-flash test contributes `fw::SpiByteSource` (W25Q64) in
   `test-dynamic/test-flatfs-spi/…`.
 
-So the **library defines the interface and does the work** (parse + link from
-whatever `read_at` returns); the **tests provide the concrete byte delivery**
-for their particular source. Adding a new storage medium requires **zero changes
-to the library** — only a new subclass in the test that needs it, exactly the
-per-test derivations shown in §1–§5 below.
+So the division is threefold, and none of it is in the abstract base:
+the **interface** is a pure virtual contract (no work), the **parse/link work**
+is concrete library code (the loaders), and the **byte-fetching work** is
+entirely in each test's derived `read_at()`. Adding a new storage medium
+requires **zero changes to the library** — only a new subclass in the test that
+needs it, exactly the per-test derivations shown in §1–§5 below.
 
 ---
 
