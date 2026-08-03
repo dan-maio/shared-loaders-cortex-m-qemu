@@ -126,14 +126,20 @@ int main() {
                            "libcppsh.so","notelf.bin" };
     for (auto lib : libs) provision_name(lib);
 
-    trace_puts("\nVerify read-back (CRC32, HSI clock)...\n");
+    /* Writes happened at HSI 4 MHz (reliable). Now switch to PLL 100 MHz
+     * (board_init is idempotent via the SWS guard, so battery_run's own
+     * board_init() is a no-op), re-init SPI, and verify reads at 25 MHz. */
+    board_init();
+    spi_flash_reinit();
+
+    trace_puts("\nVerify read-back (CRC32, PLL 25 MHz)...\n");
     unsigned vbad = 0;
     for (auto lib : libs) {
         if (verify_blob(lib)) { trace_puts("  verify OK: "); trace_puts(lib); trace_puts("\n"); }
         else { trace_puts("  verify FAIL: "); trace_puts(lib); trace_puts("\n"); ++vbad; }
     }
-    if (vbad) { trace_puts("SPI write-back CORRUPT\n"); }
-    else      { trace_puts("SPI write-back all OK\n"); }
+    if (vbad) { trace_puts("SPI read-back at 25 MHz CORRUPT\n"); }
+    else      { trace_puts("SPI read-back at 25 MHz all OK\n"); }
 
     trace_puts("\nFiles: "); put_dec(fw::fs_count()); trace_puts("\n");
 
