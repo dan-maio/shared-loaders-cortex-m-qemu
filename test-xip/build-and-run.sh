@@ -20,14 +20,6 @@ ROOT="$HERE/.."                          # repo root
 BUILD="$HERE/build"
 TOOLCHAIN="cmake/arm-none-eabi.cmake"
 EXTRA_CMAKE_OPTS=""
-# Target board selects the OpenOCD flash config: NUCLEO-F411RE = ST-LINK,
-# WEACT-F411CE = CMSIS-DAP (see test/platforms/board/openocd-<board>.cfg).
-SCL_BOARD="${SCL_BOARD:-weact}"
-case "$SCL_BOARD" in
-  nucleo|weact) ;;
-  *) echo "SCL_BOARD must be nucleo or weact (got '$SCL_BOARD')" >&2; exit 1 ;;
-esac
-CFG="$ROOT/test/platforms/board/openocd-${SCL_BOARD}.cfg"
 RUN_MS="${RUN_MS:-300000}"                 # 5 minutes (provisioning + tests)
 
 # target -> "cmake-target : subdirectory (relative to test-xip/)"
@@ -60,6 +52,16 @@ if [[ "$1" == "nucleo" || "$1" == "weact" ]]; then
 fi
 TARGET="$1"
 [[ -v TARGETS[$TARGET] ]] || { echo "error: unknown target '$TARGET'" >&2; usage; exit 1; }
+
+# Target board selects the OpenOCD flash config: NUCLEO-F411RE = ST-LINK,
+# WEACT-F411CE = CMSIS-DAP (see test/platforms/board/openocd-<board>.cfg).
+# Resolved AFTER the positional <board> override above.
+SCL_BOARD="${SCL_BOARD:-weact}"
+case "$SCL_BOARD" in
+  nucleo|weact) ;;
+  *) echo "SCL_BOARD must be nucleo or weact (got '$SCL_BOARD')" >&2; exit 1 ;;
+esac
+CFG="$ROOT/test/platforms/board/openocd-${SCL_BOARD}.cfg"
 
 APP="${TARGETS[$TARGET]%%:*}"
 SUBDIR="${TARGETS[$TARGET]#*:}"
