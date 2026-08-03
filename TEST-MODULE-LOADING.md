@@ -40,6 +40,43 @@ buffer**. The caller never knows or cares which storage the bytes came from.
 | `loader::memory_byte_source` | A RAM buffer | `common-elf-reader/include/loader/sources/memory-byte-source.hpp` |
 | `loader::fd_byte_source` | A POSIX file descriptor (host only) | `common-elf-reader/include/loader/sources/fd-byte-source.hpp` |
 
+### 0.1 The responsibility split: the general library vs the individual tests
+
+The single most important idea in this design is **who is responsible for
+what**. It is a clean separation between a **general, reusable library** and
+**test-specific, per-board/per-storage code**:
+
+**`common-elf-reader/` — the general library (storage-agnostic).**
+
+- It owns the **abstract contract** `loader::byte_source`
+  (`common-elf-reader/include/loader/byte-source.hpp`).
+- It owns the **consumer** of that contract — the ELF loader
+  (`fw::dlopen_source`, `elf_image::parse`, `Module::build`), which only ever
+  calls `size()` / `read_at()` and never knows or cares where the bytes come
+  from.
+- It also ships the **generic host readers** that are useful everywhere
+  (`loader::memory_byte_source`, `loader::fd_byte_source`).
+- It contains **no board code, no probe code, no flash driver, no test
+  logic** — nothing about WEACT/NUCLEO, semihosting, or SPI.
+
+**The tests / platforms — individual readers for their own storage.**
+
+- Each test that needs a new storage medium **derives its own class** from the
+  library's abstract `loader::byte_source` and implements `size()` +
+  `read_at()` for that medium only.
+- The freestanding platform contributes `fw::semihost_file` (semihosting reader)
+  in `test/platforms/…`.
+- The flatfs test contributes `fw::Flashbyte_source` (on-chip flash) in
+  `test-dynamic/test-dynamic-nolib/test3/…`.
+- The SPI-flash test contributes `fw::SpiByteSource` (W25Q64) in
+  `test-dynamic/test-flatfs-spi/…`.
+
+So the **library defines the interface and does the work** (parse + link from
+whatever `read_at` returns); the **tests provide the concrete byte delivery**
+for their particular source. Adding a new storage medium requires **zero changes
+to the library** — only a new subclass in the test that needs it, exactly the
+per-test derivations shown in §1–§5 below.
+
 ---
 
 ## 1. `fw::semihost_file` — read from the HOST filesystem via the debug probe
