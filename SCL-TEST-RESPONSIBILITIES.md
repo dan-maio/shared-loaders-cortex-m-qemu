@@ -181,7 +181,79 @@ the tests.
 
 ---
 
-## 6. What is shared / cross-cutting
+## 6. Linker scripts: firmware and fixtures
+
+Linker scripts are another place where the boundary is strict: **the SCL never
+owns a linker script**. This is stated in the only linker asset the SCL ships
+(`src/overlay/ldscripts/overlay-fragment.ld`, header):
+
+> "SCL overlay linker-script TEMPLATE — copy into the application's SECTIONS
+> and adapt the module list. NOT included automatically: the SCL never owns
+> linker scripts; the application does."
+
+The SCL instead defines a **contract** — a set of symbols, sections and
+properties the *application's* scripts must provide so the loaders work. Both
+sides of that contract are listed below.
+
+### 6.1 What the SCL requires from the FIRMWARE linker script
+
+The freestanding loaders read a fixed set of symbols/sections out of the
+firmware image. The application's `sections.ld` must provide:
+
+| Required by the SCL | Purpose | Provided in (app-owned) |
+|---|---|---|
+| `_simage_arena_start` / `_simage_arena_end` | boundaries of the 64 KB load arena handed out by `image_arena()` / `region_allocator` | `test/platforms/board/ldscripts/mem.ld:12` (`_simage_arena_size = 64K`) + `sections.ld:84-89` (`.image_arena` `NOLOAD` block) |
+| `_estack` | initial SP (loaded from vector[0]) | `mem.ld:9` (`ORIGIN(RAM)+LENGTH(RAM)` = `0x20020000`) |
+| `.dynamic` / `_DYNAMIC` at a **RAM VMA** | `link_context::from_self()` parses it to resolve library imports against main | `sections.ld:56` (inside the contiguous `.data/.dynamic/.got/.got.plt` init block copied to RAM) |
+| `.got` / `.got.plt` in RAM | the loader relocates these | `sections.ld:61,67` |
+| `.rel.dyn` kept | for the lazy/PLT fixup tables | `sections.ld:34` |
+| `-Wl,-E` exports | every symbol a loaded library might import must be in `.dynsym` | the app's link flags (`scl-test-app.cmake`) |
+| `.ARM.exidx` | C++ EH unwinding across the library boundary | `sections.ld:27` |
+
+For the **hosted** static loader the scripts differ but are equally app-owned:
+`test/platforms/board-hosted/vendor/common/ldscripts/mem-sh.ld`,
+`libs-sh.ld`, and `vendor/firmware/ldscripts/sections-dyn.ld` keep
+`.dynsym`/`.rel.dyn` and emit the `_reloc` table the static `link_context`
+reads, plus a reserved `scl_symtab` flash blob (`SCL_SYMTAB_BLOB_KB = 88`).
+
+For the **ET_REL** firmware (`test-relocatable/platform/reloc.ld`) the app uses
+an *ordinary* non-PIC script: no `-pie`, no `.dynsym`/GOT — the loader reads
+`.symtab` instead. For **XIP**, the app's `sections-flatfs-hosted.ld` plus the
+`-Wl,--defsym=_fs_base=0x08040000`/`_fs_size` options carve out the internal
+flash region the flatfs provisioning programs.
+
+### 6.2 The FIXTURE linker scripts (app-owned, per test)
+
+The `.so` / `.rel.o` fixtures are built with their own small scripts, all
+under the test trees — never under the SCL:
+
+| Fixture set | Script | What it produces |
+|---|---|---|
+| Freestanding `.so` (`test/fixtures`) | `test/fixtures-src/ldscripts/gcc.ld` (`INCLUDE mem.ld` + `INCLUDE sections2.ld`) | a position-independent `ET_DYN` the freestanding loaders accept |
+| Driver `.so` (`libspi/uart/led`) | `test-static/test-drv/fixtures/ldscripts/mem.ld` (RAM at `0x00000000`, 128 K) + `sections.ld` | PIC `.so` linked at image base 0 |
+| XIP `.so` | `test-xip/fixtures-src/ldscripts/xip-split.ld` | the **split `R-X | RW`** two-`PT_LOAD` layout (`PHDRS`: `text` flags 5, `data` flags 6; `data_vaddr == data_off`) that makes `xip::SegmentMap::split == true` so XIP is possible |
+| ET_REL `.rel.o` | `test-relocatable/fixtures-reloc/ldscripts/...` | non-PIC `ET_REL` objects (`-mlong-calls -fno-pic -r`) with `.symtab`/`.rel.text` for `reloc::load_set` |
+
+### 6.3 Responsibility split for linker scripts
+
+- **The SCL** provides: one *template* (`overlay-fragment.ld`, for the overlay
+  technique), and the *requirements* list (§6.1). It never ships a complete
+  firmware or fixture script, and it never knows the memory map or board.
+- **The test app / platform** owns and writes every real linker script —
+  firmware (`mem.ld`/`sections.ld`/`reloc.ld`/hosted `*-sh.ld`) and fixtures
+  (`gcc.ld`, `xip-split.ld`, `mem.ld`, …) — and must satisfy the SCL contract:
+  reserve the arena, put `.dynamic`/GOT in RAM, export symbols, and (for XIP)
+  produce a split `R-X | RW` image.
+
+If the firmware script forgets the arena or `_DYNAMIC`, `image_arena()` or
+`link_context::from_self()` fails at runtime — the loader did nothing wrong;
+the script (app side) violated the contract. If the XIP fixture is linked with
+a fused `RWX` segment, `SegmentMap::split` reports false and the module is
+copy-whole-loaded instead — again the fixture script's responsibility.
+
+---
+
+## 7. What is shared / cross-cutting
 
 Some responsibilities are not "SCL" or "app" alone but a **contract**:
 
@@ -195,10 +267,13 @@ Some responsibilities are not "SCL" or "app" alone but a **contract**:
 - **The arena contract.** The SCL places images in memory the app reserved
   (linker `_simage_arena` for nolib, newlib heap for newlib, `g_arena` for
   reloc, caller `buf` for static/XIP).
+- **The linker-script contract.** See §6: the SCL lists what the app's scripts
+  must provide (`_simage_arena_start/end`, `_DYNAMIC` in RAM, `.got`, exports,
+  split `R-X|RW` fixtures); the app writes the scripts.
 
 ---
 
-## 7. Summary — the responsibility boundary after loading & parsing
+## 8. Summary — the responsibility boundary after loading & parsing
 
 | Concern | Owned by SCL | Owned by the test app |
 |---|---|---|
@@ -212,7 +287,7 @@ Some responsibilities are not "SCL" or "app" alone but a **contract**:
 | Getting the bytes (reader) | | ✔ `byte_source` subclasses |
 | Choosing the storage / provisioning | | ✔ `dlopen` vs `dlopen_fs`, flatfs, SPI→internal pipeline |
 | Board init, clock, LED, console | | ✔ platform + `board.c` |
-| Linker script / arena size / stack | | ✔ platform `ldscripts` |
+| Linker scripts (firmware + fixtures) | only a template + requirements | ✔ owns and writes them (`mem.ld`/`sections.ld`/`reloc.ld`/hosted `*-sh.ld`; fixture `gcc.ld`/`xip-split.ld`/…) |
 | Fixture `.so` / `.rel.o` building | | ✔ CMake / Makefiles / scripts |
 | Test battery, checks, reporting | | ✔ each `main.cpp` |
 
