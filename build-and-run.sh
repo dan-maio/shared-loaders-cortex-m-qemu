@@ -119,4 +119,4 @@ if [[ "$TEST" == newlib*-sf ]]; then export SCL_ABI=sf; fi
 [[ -z "$ABI" ]] || export SCL_ABI="$ABI"
 
 echo "=== board=$SCL_BOARD test=$TEST ($SCRIPT $ARG) ==="
-exec "$HERE/$SCRIPT" "$ARG"
+exec "$HERE/$SCRIPT" "$SCL_BOARD" "$ARG"

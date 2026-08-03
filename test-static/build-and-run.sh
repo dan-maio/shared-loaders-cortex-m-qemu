@@ -28,7 +28,7 @@ declare -A TARGETS=(
 )
 
 usage() {
-    echo "Usage: $(basename "$0") <target>" >&2
+    echo "Usage: $(basename "$0") <board> <target>" >&2
     echo "Targets (subdirectory name without the test- prefix):" >&2
     for t in $(printf '%s\n' "${!TARGETS[@]}" | sort); do
         printf '  %-16s test-static/%s\n' "$t" "${TARGETS[$t]}" >&2
@@ -36,6 +36,13 @@ usage() {
 }
 
 if [[ $# -eq 0 || "$1" == "-h" || "$1" == "--help" ]]; then usage; exit 1; fi
+
+# Optional leading <board> positional (nucleo|weact); overrides SCL_BOARD env.
+if [[ "$1" == "nucleo" || "$1" == "weact" ]]; then
+    export SCL_BOARD="$1"
+    shift
+    [[ $# -ge 1 ]] || { usage; exit 1; }
+fi
 TARGET="$1"
 [[ -v TARGETS[$TARGET] ]] || { echo "error: unknown target '$TARGET'" >&2; usage; exit 1; }
 

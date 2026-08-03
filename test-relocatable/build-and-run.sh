@@ -12,7 +12,7 @@ BUILD="$HERE/build"
 
 show_help() {
     cat <<EOF
-Usage: $(basename "$0") <target-variant>
+Usage: $(basename "$0") <board> <target-variant>
 
 Configure, build, flash, and run the selected relocatable (ET_REL) test firmware.
 Ctrl-C to stop. The semihosting console prints directly to stdout.
@@ -33,6 +33,13 @@ elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
     exit 0
 fi
 
+
+# Optional leading <board> positional (nucleo|weact); overrides SCL_BOARD env.
+if [[ "$1" == "nucleo" || "$1" == "weact" ]]; then
+    export SCL_BOARD="$1"
+    shift
+    [[ $# -ge 1 ]] || { usage; exit 1; }
+fi
 TARGET="$1"
 
 # Target board selects the unified platform boot/init + the OpenOCD flash
