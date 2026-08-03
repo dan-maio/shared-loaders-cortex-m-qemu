@@ -20,20 +20,12 @@ string(REPLACE "-mfloat-abi=hard -mfpu=fpv4-sp-d16" "-mfloat-abi=soft" CMAKE_C_F
 set(DRV_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(ST ${SCL_ROOT}/test-static/test-static)
 
-# UART fixture baud divisor depends on PCLK2 (NUCLEO 84 MHz / WEACT 100 MHz).
-if(SCL_BOARD STREQUAL "nucleo")
-    set(UART_PCLK 84000000)
-else()
-    set(UART_PCLK 100000000)
-endif()
-
 set(LIB_CFLAGS -mcpu=cortex-m4 -mthumb -mfloat-abi=soft
     -fPIC -fno-inline-functions -fno-common -O0 -g3 -Wall -Wextra)
 
 function(add_shlib name)
     add_custom_target(build_${name}
         COMMAND ${CMAKE_C_COMPILER} ${LIB_CFLAGS} -I${DRV_DIR}/fixtures/include
-                -DUART_PCLK=${UART_PCLK}
                 -c ${DRV_DIR}/fixtures/src/${name}.c -o ${DRV_DIR}/fixtures/src/${name}.o
         COMMAND ${CMAKE_C_COMPILER} ${LIB_CFLAGS} ${DRV_DIR}/fixtures/src/${name}.o
                 -o ${DRV_DIR}/fixtures/lib${name}.so -shared -nostartfiles
