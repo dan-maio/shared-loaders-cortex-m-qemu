@@ -1,132 +1,152 @@
-/**
- * @file w25q64.cpp
- * @brief W25Q64 driver for the flatfs-spi test — bit-banged GPIO SPI.
- *
- * Uses the same bit-banged GPIO SPI (PA4 CS, PA5 SCK, PA6 MISO, PA7 MOSI)
- * that the XIP static/spi-flash test's libspi.so proves reliable on this
- * board. The HAL SPI1-peripheral driver previously used here read corrupt
- * data at 25 MHz (writes/reads only stayed intact below ~4 MHz); a bit-banged
- * driver is clock-independent and works at any CPU speed.
- */
-#include "spi-flash.h"
+#include "w25q64.h"
 
-#include <cstdint>
+#include "stm32f4xx.h"
+#include "stm32f4xx_hal.h"
 
-#define REG32(a) (*(volatile uint32_t*)(a))
+#define CS_PORT   GPIOA
+#define CS_PIN    GPIO_PIN_4
 
-#define RCC_AHB1ENR     REG32(0x40023830u)
-#define GPIOA_MODER     REG32(0x40020000u)
-#define GPIOA_BSRR      REG32(0x40020018u)
-#define GPIOA_IDR       REG32(0x40020010u)
-#define GPIOA_PUPDR     REG32(0x4002000Cu)
+static SPI_HandleTypeDef spi_handle;
 
-#define CS   4u
-#define SCK  5u
-#define MISO 6u
-#define MOSI 7u
-
-static void cs_low(void)  { GPIOA_BSRR = (1u << (CS + 16)); }
-static void cs_high(void) { GPIOA_BSRR = (1u << CS); }
-static void sck_hi(void)  { GPIOA_BSRR = (1u << SCK); }
-static void sck_lo(void)  { GPIOA_BSRR = (1u << (SCK + 16)); }
-static void mosi_hi(void) { GPIOA_BSRR = (1u << MOSI); }
-static void mosi_lo(void) { GPIOA_BSRR = (1u << (MOSI + 16)); }
-static int  miso_read(void) { return (GPIOA_IDR >> MISO) & 1; }
-
-static uint8_t xfer(uint8_t d) {
-    uint8_t r = 0;
-    for (int b = 7; b >= 0; b--) {
-        uint32_t mosi_val = (1u << (MOSI + 16)) + (((uint32_t)(d >> b) & 1u) << MOSI);
-        GPIOA_BSRR = mosi_val;
-        GPIOA_BSRR = (1u << SCK);
-        r = (r << 1) | ((GPIOA_IDR >> MISO) & 1);
-        GPIOA_BSRR = (1u << (SCK + 16));
-    }
-    return r;
+w25q64::w25q64()
+{
 }
 
-void spi_flash_init(void) {
-    RCC_AHB1ENR |= (1u << 0);
-    __asm__ volatile("dsb" ::: "memory");
-    GPIOA_MODER = (GPIOA_MODER & ~((3u<<8)|(3u<<10)|(3u<<14)))
-                | ((1u<<8)|(1u<<10)|(1u<<14));
-    GPIOA_MODER &= ~(3u << (MISO * 2));
-    GPIOA_PUPDR = (GPIOA_PUPDR & ~((3u<<8)|(3u<<10)|(3u<<12)|(3u<<14)))
-                | ((1u<<8)|(1u<<10)|(1u<<12)|(1u<<14));
-    cs_high(); sck_lo(); mosi_hi();
+void w25q64::cs_low()  { HAL_GPIO_WritePin(CS_PORT, CS_PIN, GPIO_PIN_RESET); }
+void w25q64::cs_high() { HAL_GPIO_WritePin(CS_PORT, CS_PIN, GPIO_PIN_SET); }
+
+void w25q64::power_up()
+{
+  __HAL_RCC_SPI1_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+
+  GPIO_InitTypeDef gpio;
+  gpio.Pin = CS_PIN;
+  gpio.Mode = GPIO_MODE_OUTPUT_PP;
+  gpio.Pull = GPIO_PULLUP;
+  gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(CS_PORT, &gpio);
+  cs_high();
+
+  gpio.Pin = GPIO_PIN_5 | GPIO_PIN_7;
+  gpio.Mode = GPIO_MODE_AF_PP;
+  gpio.Pull = GPIO_PULLUP;
+  gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+  gpio.Alternate = GPIO_AF5_SPI1;
+  HAL_GPIO_Init(GPIOA, &gpio);
+
+  gpio.Pin = GPIO_PIN_6;
+  gpio.Mode = GPIO_MODE_AF_PP;
+  gpio.Pull = GPIO_PULLUP;
+  gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+  gpio.Alternate = GPIO_AF5_SPI1;
+  HAL_GPIO_Init(GPIOA, &gpio);
+
+  spi_handle.Instance = SPI1;
+  spi_handle.Init.Mode = SPI_MODE_MASTER;
+  spi_handle.Init.Direction = SPI_DIRECTION_2LINES;
+  spi_handle.Init.DataSize = SPI_DATASIZE_8BIT;
+  spi_handle.Init.CLKPolarity = SPI_POLARITY_LOW;
+  spi_handle.Init.CLKPhase = SPI_PHASE_1EDGE;
+  spi_handle.Init.NSS = SPI_NSS_SOFT;
+  spi_handle.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+  spi_handle.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  spi_handle.Init.TIMode = SPI_TIMODE_DISABLE;
+  spi_handle.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  spi_handle.Init.CRCPolynomial = 10;
+  HAL_SPI_Init(&spi_handle);
 }
 
-void spi_flash_get_sr(uint32_t* sr, uint32_t* cr1) { (void)sr; (void)cr1; }
-
-/* Bit-banged SPI needs no re-initialisation when the PLL changes. */
-void spi_flash_reinit(void) { }
-
-static void write_enable(void) {
-    cs_low(); xfer(0x06); cs_high();
+bool w25q64::read_id(uint8_t* mid, uint8_t* tid)
+{
+  uint8_t cmd = 0x9F;
+  uint8_t rx[3];
+  cs_low();
+  HAL_SPI_TransmitReceive(&spi_handle, &cmd, &cmd, 1, 100);
+  HAL_SPI_TransmitReceive(&spi_handle, rx, rx, 3, 100);
+  cs_high();
+  *mid = rx[0];
+  *tid = rx[2];
+  return rx[0] == 0xEF;
 }
 
-static void wait_busy(void) {
-    do {
-        cs_low(); xfer(0x05); uint8_t s = xfer(0xFF); cs_high();
-        if (!(s & 1)) break;
-    } while (1);
+static void tx(uint8_t* buf, uint16_t len) {
+  uint8_t dummy[32];
+  while (len > 0) {
+    uint16_t chunk = len > sizeof(dummy) ? sizeof(dummy) : len;
+    HAL_SPI_TransmitReceive(&spi_handle, buf, dummy, chunk, 100);
+    buf += chunk;
+    len -= chunk;
+  }
 }
 
-int spi_flash_read_id(uint8_t* mid, uint8_t* tid) {
-    cs_low();
-    xfer(0x9F);
-    *mid = xfer(0xFF);
-    xfer(0xFF);
-    *tid = xfer(0xFF);
-    cs_high();
-    return (*mid == 0xEF) ? 0 : -1;
+void w25q64::write_enable()
+{
+  uint8_t cmd = 0x06;
+  cs_low(); tx(&cmd, 1); cs_high();
 }
 
-void spi_flash_sector_erase(uint32_t addr) {
-    write_enable();
-    cs_low();
-    xfer(0x20);
-    xfer((addr >> 16) & 0xFF);
-    xfer((addr >> 8) & 0xFF);
-    xfer(addr & 0xFF);
-    cs_high();
-    wait_busy();
+uint8_t w25q64::read_status()
+{
+  uint8_t cmd = 0x05;
+  uint8_t val = 0;
+  cs_low();
+  HAL_SPI_TransmitReceive(&spi_handle, &cmd, &cmd, 1, 100);
+  HAL_SPI_TransmitReceive(&spi_handle, &val, &val, 1, 100);
+  cs_high();
+  return val;
 }
 
-int spi_flash_page_program(uint32_t addr, const uint8_t* data, uint16_t len) {
-    if (len > 256) return -1;
-    write_enable();
-    cs_low();
-    xfer(0x02);
-    xfer((addr >> 16) & 0xFF);
-    xfer((addr >> 8) & 0xFF);
-    xfer(addr & 0xFF);
-    for (uint16_t i = 0; i < len; i++) xfer(data[i]);
-    cs_high();
-    wait_busy();
-    return 0;
+void w25q64::wait_busy()
+{
+  while (read_status() & 0x01);
 }
 
-int spi_flash_write(uint32_t addr, const uint8_t* data, uint32_t len) {
-    uint32_t pos = 0;
-    while (pos < len) {
-        uint32_t page = addr + pos;
-        uint32_t page_off = page & 0xFF;
-        uint32_t chunk = 256 - page_off;
-        if (chunk > len - pos) chunk = len - pos;
-        if (spi_flash_page_program(page, data + pos, (uint16_t)chunk))
-            return -1;
-        pos += chunk;
-    }
-    return 0;
+void w25q64::sector_erase(uint32_t addr)
+{
+  write_enable();
+  uint8_t cmd[4] = { 0x20, uint8_t((addr >> 16) & 0xFF), uint8_t((addr >> 8) & 0xFF), uint8_t(addr & 0xFF) };
+  cs_low(); tx(cmd, 4); cs_high();
+  wait_busy();
 }
 
-void spi_flash_read(uint32_t addr, uint8_t* data, uint16_t len) {
-    cs_low();
-    xfer(0x03);
-    xfer((addr >> 16) & 0xFF);
-    xfer((addr >> 8) & 0xFF);
-    xfer(addr & 0xFF);
-    for (uint16_t i = 0; i < len; i++) data[i] = xfer(0xFF);
-    cs_high();
+bool w25q64::page_program(uint32_t addr, const uint8_t* data, uint16_t len)
+{
+  if (len > 256) return false;
+  write_enable();
+  uint8_t hdr[4] = { 0x02, uint8_t((addr >> 16) & 0xFF), uint8_t((addr >> 8) & 0xFF), uint8_t(addr & 0xFF) };
+  cs_low();
+  tx(hdr, 4);
+  tx((uint8_t*)data, len);
+  cs_high();
+  wait_busy();
+  return true;
+}
+
+void w25q64::read(uint32_t addr, uint8_t* data, uint32_t len)
+{
+  uint8_t hdr[4] = { 0x03, uint8_t((addr >> 16) & 0xFF), uint8_t((addr >> 8) & 0xFF), uint8_t(addr & 0xFF) };
+  cs_low(); tx(hdr, 4);
+  uint32_t pos = 0;
+  while (pos < len) {
+    uint16_t chunk = 65535;
+    if (chunk > len - pos) chunk = len - pos;
+    HAL_SPI_Receive(&spi_handle, data + pos, chunk, 100);
+    pos += chunk;
+  }
+  cs_high();
+}
+
+bool w25q64::write(uint32_t addr, const uint8_t* data, uint32_t len)
+{
+  uint32_t pos = 0;
+  while (pos < len) {
+    uint32_t page = addr + pos;
+    uint32_t page_off = page & 0xFF;
+    uint16_t chunk = 256 - page_off;
+    if (chunk > len - pos) chunk = len - pos;
+    if (!page_program(page, data + pos, chunk)) return false;
+    pos += chunk;
+  }
+  return true;
 }

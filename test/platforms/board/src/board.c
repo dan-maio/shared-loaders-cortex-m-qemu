@@ -65,6 +65,7 @@
 #define PLLM_VAL        16u           /* HSE / 16 * 336 / 4 = 84 MHz                */
 #define PLLN_VAL        336u
 #define PLLP_VAL        (1u << 16)    /* /4                                        */
+#define PLLQ_VAL        (7u << 24)    /* VCO / 7 = 48 MHz (USB)                     */
 #define FLASH_LATENCY   2u
 #define SYSTICK_HZ      84000u
 #else                                  /* SCL_BOARD_WEACT (default)                 */
@@ -73,6 +74,7 @@
 #define PLLM_VAL        25u           /* HSE / 25 * 200 / 2 = 100 MHz               */
 #define PLLN_VAL        200u
 #define PLLP_VAL        (0u << 16)    /* /2                                        */
+#define PLLQ_VAL        (4u << 24)    /* matches the original weact board.c         */
 #define FLASH_LATENCY   3u
 #define SYSTICK_HZ      100000u
 #define CS_PIN          4u            /* SPI1 CS on PA4 (WeAct only)                */
@@ -124,7 +126,7 @@ void board_init(void)
     RCC_PLLCFGR = (PLLM_VAL << 0)
                 | (PLLN_VAL << 6)
                 | (PLLP_VAL << 16)
-                | (7u << 24)
+                | (PLLQ_VAL)
                 | (1u << 22);
 
     /* Enable PLL */
