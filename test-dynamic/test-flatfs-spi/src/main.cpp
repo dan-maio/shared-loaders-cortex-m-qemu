@@ -3,7 +3,7 @@
 #include "semihost-file.hpp"
 #include "image-memory.hpp"
 #include "fs-archive-spi.hpp"
-#include "w25q64.h"
+#include "spi-flash.h"
 #include "battery.hpp"
 #include "fm-iface.h"
 #include <cstdint>
@@ -15,9 +15,6 @@
 #define DL_LIB_DIR "."
 #endif
 
-extern "C" void HAL_Init(void);
-extern "C" void HAL_IncTick(void);
-
 static void put_dec(std::uint32_t v) {
     char b[10]; int i = 0;
     if (v == 0) { trace_putc('0'); return; }
@@ -25,34 +22,10 @@ static void put_dec(std::uint32_t v) {
     while (i) trace_putc(b[--i]);
 }
 
-static w25q64 flash;
-static bool flash_init_ok = false;
-
-// SPI-flash flatfs backend using the HAL-based w25q64 driver
-extern "C" {
-void spi_flash_init(void) {
-    HAL_Init();
-    flash.power_up();
-    flash_init_ok = true;
-}
-int  spi_flash_read_id(uint8_t* mid, uint8_t* tid) {
-    return flash.read_id(mid, tid) ? 0 : -1;
-}
-void spi_flash_sector_erase(uint32_t addr) {
-    flash.sector_erase(addr);
-}
-int  spi_flash_page_program(uint32_t addr, const uint8_t* data, uint16_t len) {
-    return flash.page_program(addr, data, len) ? 0 : -1;
-}
-void spi_flash_read(uint32_t addr, uint8_t* data, uint16_t len) {
-    flash.read(addr, data, len);
-}
-int  spi_flash_write(uint32_t addr, const uint8_t* data, uint32_t len) {
-    return flash.write(addr, data, len) ? 0 : -1;
-}
-void spi_flash_get_sr(uint32_t* sr, uint32_t* cr1) { (void)sr; (void)cr1; }
-void spi_flash_reinit(void) { flash.power_up(); }
-}
+// SPI-flash flatfs backend: bit-banged GPIO SPI driver (w25q64.cpp), the same
+// approach the XIP static/spi-flash test's libspi.so uses and which is proven
+// reliable on this board at any CPU clock. The spi_flash_* API comes from the
+// driver; no HAL SPI peripheral, no PLL-dependent re-init needed.
 
 static bool provision_name(const char* name) {
     char path[160]; std::size_t i = 0;
@@ -110,7 +83,7 @@ int main() {
     trace_puts("SPI flash init OK\n");
 
     uint8_t mid, tid;
-    if (flash.read_id(&mid, &tid)) {
+    if (spi_flash_read_id(&mid, &tid) == 0) {
         trace_puts("W25Q64 detected\n");
     } else {
         trace_puts("W25Q64 NOT found\n");
@@ -126,20 +99,20 @@ int main() {
                            "libcppsh.so","notelf.bin" };
     for (auto lib : libs) provision_name(lib);
 
-    /* Writes happened at HSI 4 MHz (reliable). Now switch to PLL 100 MHz
-     * (board_init is idempotent via the SWS guard, so battery_run's own
-     * board_init() is a no-op), re-init SPI, and verify reads at 25 MHz. */
+    /* Bit-banged GPIO SPI is clock-independent, so reads work at any CPU
+     * clock. Switch to PLL 100 MHz for the battery (board_init is idempotent
+     * via the SWS guard) and verify the read-back there too. */
     board_init();
-    spi_flash_reinit();
+    spi_flash_reinit();   /* bit-bang no-op */
 
-    trace_puts("\nVerify read-back (CRC32, PLL 25 MHz)...\n");
+    trace_puts("\nVerify read-back (CRC32, PLL clock, bit-bang SPI)...\n");
     unsigned vbad = 0;
     for (auto lib : libs) {
         if (verify_blob(lib)) { trace_puts("  verify OK: "); trace_puts(lib); trace_puts("\n"); }
         else { trace_puts("  verify FAIL: "); trace_puts(lib); trace_puts("\n"); ++vbad; }
     }
-    if (vbad) { trace_puts("SPI read-back at 25 MHz CORRUPT\n"); }
-    else      { trace_puts("SPI read-back at 25 MHz all OK\n"); }
+    if (vbad) { trace_puts("SPI read-back CORRUPT\n"); }
+    else      { trace_puts("SPI read-back all OK\n"); }
 
     trace_puts("\nFiles: "); put_dec(fw::fs_count()); trace_puts("\n");
 
