@@ -85,13 +85,32 @@ static bool provision_name(const char* name) {
     return ok;
 }
 
+/* Read a provisioned blob back from the W25Q64 and check its CRC32 against the
+ * archive TOC entry, so a corrupt SPI write is caught immediately. */
+static bool verify_blob(const char* name) {
+    const fw::FsEntry* e = fw::fs_find(name);
+    if (!e) return false;
+    auto memp = fw::image_arena().alloc(e->size);
+    if (!memp) return false;
+    auto* buf = static_cast<std::byte*>(*memp);
+    spi_flash_reinit();
+    spi_flash_read(e->off, reinterpret_cast<std::uint8_t*>(buf),
+                   static_cast<std::uint16_t>(e->size));
+    const bool ok = (fw::crc32_calc(buf, e->size) == e->crc32);
+    fw::image_arena().free(buf);
+    return ok;
+}
+
 int main() {
     trace_puts("\n=== flatfs-spi (HAL-based SPI driver) ===\n");
 
-    /* SPI init at HSI 16MHz (before battery's PLL config) */
-
-    spi_flash_init();
-    trace_puts("SPI flash init OK\n");
+    /* Bring the PLL up FIRST (100 MHz) so SPI provisioning and the battery both
+     * run on the same clock (SPI1 /4 = 25 MHz). board_init() is now idempotent
+     * (SWS guard), so battery_run()'s own board_init() is a safe no-op. */
+    spi_flash_init();          /* HAL at HSI (correct SysTick for HAL_InitTick) */
+    board_init();              /* HSE 25 MHz -> PLL 100 MHz + SysTick@100 MHz   */
+    spi_flash_reinit();        /* re-init SPI1 for the 100 MHz clock            */
+    trace_puts("SPI flash init OK (PLL 100 MHz, SPI 25 MHz)\n");
 
     uint8_t mid, tid;
     if (flash.read_id(&mid, &tid)) {
@@ -109,6 +128,15 @@ int main() {
                            "ehx_catch.so", "libprov.so", "libcons.so",
                            "libcppsh.so","notelf.bin" };
     for (auto lib : libs) provision_name(lib);
+
+    trace_puts("\nVerify read-back (CRC32)...\n");
+    unsigned vbad = 0;
+    for (auto lib : libs) {
+        if (verify_blob(lib)) { trace_puts("  verify OK: "); trace_puts(lib); trace_puts("\n"); }
+        else { trace_puts("  verify FAIL: "); trace_puts(lib); trace_puts("\n"); ++vbad; }
+    }
+    if (vbad) { trace_puts("SPI write-back CORRUPT\n"); }
+    else      { trace_puts("SPI write-back all OK\n"); }
 
     trace_puts("\nFiles: "); put_dec(fw::fs_count()); trace_puts("\n");
 
