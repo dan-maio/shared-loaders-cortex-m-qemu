@@ -48,14 +48,25 @@ for a in "$@"; do
       *)         POS+=("$a") ;;
     esac
 done
-if [[ -z "$BOARD" && ${#POS[@]} -ge 1 ]]; then BOARD="${POS[0]}"; fi
-if [[ -z "$TEST" && ${#POS[@]} -ge 2 ]]; then TEST="${POS[1]}"; fi
-if [[ -n "$HELP" || -z "$BOARD" || -z "$TEST" ]]; then
+# Map positionals:  [board] test   (board defaults to weact, so a bare test
+# works: ./build-and-run.sh static/spi-flash  ==  board=weact test=...).
+if [[ ${#POS[@]} -ge 1 ]]; then
+    if [[ "${POS[0]}" == "nucleo" || "${POS[0]}" == "weact" ]]; then
+        [[ -z "$BOARD" ]] && BOARD="${POS[0]}"
+        if [[ ${#POS[@]} -ge 2 && -z "$TEST" ]]; then TEST="${POS[1]}"; fi
+    else
+        [[ -z "$BOARD" ]] && BOARD="weact"
+        [[ -z "$TEST" ]] && TEST="${POS[0]}"
+    fi
+fi
+[[ -z "$BOARD" ]] && BOARD="weact"
+if [[ -n "$HELP" || -z "$TEST" ]]; then
     sed -n '2,35p' "$0"
     echo
     echo "Example:"
     echo "  ./build-and-run.sh board=weact  test=dyn2"
     echo "  ./build-and-run.sh board=nucleo test=newlib2-sf abi=sf"
+    echo "  ./build-and-run.sh static/spi-flash          # board defaults to weact"
     exit 1
 fi
 
@@ -63,7 +74,7 @@ case "$BOARD" in nucleo|weact) ;; *) echo "board must be nucleo or weact (got '$
 export SCL_BOARD="$BOARD"
 
 # SPI apps are WEACT-only (the NUCLEO-F411RE has no SPI wiring).
-SPI_TESTS="flatfs-spi flatfs-bitbang-spi drv classic-spi xip-static/spi-flash"
+SPI_TESTS="flatfs-spi flatfs-bitbang-spi drv classic-spi xip-static/spi-flash static/spi-flash"
 if [[ "$BOARD" == "nucleo" ]]; then
     for t in $SPI_TESTS; do
         [[ "$TEST" == "$t" ]] && { echo "error: '$TEST' needs SPI hardware — only the WEACT board has it (board=nucleo)" >&2; exit 1; }
@@ -104,6 +115,7 @@ declare -A ROUTE=(
   [xip-interrupt]="test-xip/build-and-run.sh:interrupt"
   [xip-static/semihosting]="test-xip/build-and-run.sh:static/semihosting"
   [xip-static/spi-flash]="test-xip/build-and-run.sh:static/spi-flash"
+  [static/spi-flash]="test-xip/build-and-run.sh:static/spi-flash"
   [xip-static-direct]="test-xip/build-and-run.sh:static-direct"
   [xip-interrupt-static]="test-xip/build-and-run.sh:interrupt-static"
   [xip-interrupt-static-direct]="test-xip/build-and-run.sh:interrupt-static-direct"
