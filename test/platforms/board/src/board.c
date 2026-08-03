@@ -96,13 +96,6 @@ void SysTick_Handler(void)
 
 void board_init(void)
 {
-    /* Idempotent clock bring-up (SWS guard): if SYSCLK is already the PLL,
-     * board_init() was called before (e.g. the flatfs-spi firmware configures
-     * the PLL up front, then battery_run() calls board_init() again) — skip
-     * without reconfiguring the running PLL or re-doing GPIO/SysTick. */
-    if ((RCC_CFGR & (3u << 2)) == (2u << 2))
-        return;
-
 #if defined(SCL_BOARD_NUCLEO)
     /* Enable GPIOA clock, PA5 = output (LD2) */
     RCC_AHB1ENR |= (1u << 0);
@@ -143,8 +136,9 @@ void board_init(void)
     RCC_CFGR = (RCC_CFGR & ~(3u << 0)) | (2u << 0);
     while ((RCC_CFGR & (3u << 2)) != (2u << 2));
 
-    /* SysTick: 1 ms */
-    SYST_RVR = (SYSTICK_HZ / 1000u) - 1u;
+    /* SysTick: 1 ms. SYSTICK_HZ is the 1 ms reload count (SYSCLK/1000), e.g.
+     * 100000 @ 100 MHz, 84000 @ 84 MHz — the reload value directly, NOT Hz. */
+    SYST_RVR = SYSTICK_HZ - 1u;
     SYST_CVR = 0u;
     SYST_CSR = (1u << 0) | (1u << 1) | (1u << 2);
 }
