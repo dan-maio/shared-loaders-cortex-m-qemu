@@ -32,8 +32,15 @@ unsigned int (*g_fixture_systick_handler)(unsigned int) = nullptr;
 volatile bool g_blink_enabled = false;
 }
 
+/* Board LED pin: NUCLEO-F411RE = LD2 on PA5, WEACT-F411CE = PC13.
+   Selected by the unified board switch (see test/platforms/board/board.h). */
+#if defined(SCL_BOARD_NUCLEO)
+#define BLINK_PORT_NUMBER (0)
+#define BLINK_PIN_NUMBER  (5)
+#else
 #define BLINK_PORT_NUMBER (2)
 #define BLINK_PIN_NUMBER  (13)
+#endif
 #define BLINK_ACTIVE_LOW  (false)
 static led blink_leds[1] = {{BLINK_PORT_NUMBER, BLINK_PIN_NUMBER, BLINK_ACTIVE_LOW}};
 
