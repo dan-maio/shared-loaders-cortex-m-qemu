@@ -25,7 +25,14 @@ PIC="-fpic -msingle-pic-base -mpic-register=r10 -mno-pic-data-is-text-relative"
 OPT="-O0 -ffunction-sections -fdata-sections -fno-inline-functions"
 LDFLAGS="-Wl,-E -Wl,-Bsymbolic -shared -nostartfiles"
 
-echo "=== Building XIP-compatible fixtures from test-drv ==="
+# UART fixture baud divisor depends on PCLK2 (NUCLEO 84 MHz / WEACT 100 MHz).
+case "${SCL_BOARD:-weact}" in
+  nucleo) UART_PCLK=84000000 ;;
+  *)      UART_PCLK=100000000 ;;
+esac
+UART_FLAGS="-DUART_PCLK=$UART_PCLK"
+
+echo "=== Building XIP-compatible fixtures from test-drv (UART_PCLK=$UART_PCLK) ==="
 
 # Build spi.so
 echo "Building spi.so (XIP)..."
@@ -37,7 +44,7 @@ $CC $MCU $PIC $OPT $LDFLAGS \
 
 # Build uart.so
 echo "Building uart.so (XIP)..."
-$CC $MCU $PIC $OPT -I"$DRV_DIR/fixtures/include" \
+$CC $MCU $PIC $OPT $UART_FLAGS -I"$DRV_DIR/fixtures/include" \
     -c "$DRV_DIR/fixtures/src/uart.c" -o "$DRV_DIR/fixtures/src/uart.o"
 $CC $MCU $PIC $OPT $LDFLAGS \
     "$DRV_DIR/fixtures/src/uart.o" -T "$LD" -o "$OUT/libuart.so"

@@ -11,6 +11,12 @@
 #define USART1_BRR   (*(volatile uint32_t*)(0x40011008u))
 #define USART1_CR1   (*(volatile uint32_t*)(0x4001100Cu))
 
+/* PCLK2 at build time: 84 MHz (NUCLEO-F411RE) or 100 MHz (WEACT-F411CE).
+ * The fixture build passes -DUART_PCLK=<Hz>; default 100 MHz. */
+#ifndef UART_PCLK
+#define UART_PCLK 100000000u
+#endif
+
 static int initialized = 0;
 
 void uart_init(void) {
@@ -25,8 +31,9 @@ void uart_init(void) {
                 | ((1u << 18) | (1u << 20));
     GPIOA_OSPEEDR |= ((3u << 18) | (3u << 20));
 
-    /* PCLK2 = 100 MHz (PLL: HSE/25*200/2). USARTDIV = 100e6/(16*115200) ≈ 54.25 */
-    USART1_BRR = (54u << 4) | 4u;
+    /* BRR = PCLK2 / baud (100 MHz/115200 = 868, 84 MHz/115200 = 729). */
+    uint32_t brr = (UART_PCLK + 115200u / 2u) / 115200u;
+    USART1_BRR = brr;
     USART1_CR1 = (1u << 13) | (1u << 3) | (1u << 2);
     initialized = 1;
 }
