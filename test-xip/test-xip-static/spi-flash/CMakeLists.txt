@@ -1,0 +1,147 @@
+cmake_minimum_required(VERSION 3.20)
+if(NOT TARGET scl-common)
+    project(scl-fw-xip-static-spi-flash LANGUAGES C CXX)
+    get_filename_component(SCL_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../.. ABSOLUTE)
+    add_subdirectory(${SCL_ROOT} scl)
+    enable_testing()
+endif()
+
+get_filename_component(_repo ${CMAKE_CURRENT_SOURCE_DIR}/../../.. ABSOLUTE)
+set(_test3 ${_repo}/test-dynamic/test-dynamic-nolib/test3)
+set(_test_static ${_repo}/test-static/test-static)
+set(ST_XIP ${_repo}/test-xip/test-xip-static/semihosting)
+set(SCL_TEST_DIR ${_repo}/test)
+
+# Board boot/init switch + HSE value. SPI-flash apps are WEACT-only.
+set(SCL_BOARD "weact" CACHE STRING "Target board (nucleo or weact)")
+if(SCL_BOARD STREQUAL "nucleo")
+    set(XIP_BOARD_DEFS SCL_BOARD_NUCLEO=1 HSE_VALUE=16000000)
+elseif(SCL_BOARD STREQUAL "weact")
+    set(XIP_BOARD_DEFS SCL_BOARD_WEACT=1 HSE_VALUE=25000000)
+else()
+    message(FATAL_ERROR "SCL_BOARD must be 'nucleo' or 'weact' (got '${SCL_BOARD}')")
+endif()
+
+set(_su ${_repo}/test/platforms/board-hosted/vendor)
+
+# ---- hosted platform ----
+set(PLATFORM_SOURCES
+    ${_repo}/test-xip/common/src/semihost-file.cpp
+    ${_su}/common/firmware/src/scl-log-trace.cpp
+    ${_su}/common/firmware/src/initialize-hardware.c
+    ${_su}/common/firmware/src/stm32f4xx_hal_msp.c
+    ${_su}/common/system/src/cmsis/system_stm32f4xx.c
+    ${_su}/common/system/src/cmsis/vectors_stm32f411xe.c
+    ${_su}/common/system/src/cortexm/exception-handlers.c
+    ${_su}/common/system/src/cortexm/initialize-hardware.c
+    ${_su}/common/system/src/cortexm/reset-hardware.c
+    ${_su}/common/system/src/diag/trace.c
+    ${_su}/common/system/src/diag/trace-impl.c
+    ${_su}/common/system/src/newlib/assert.c
+    ${_su}/common/system/src/newlib/exit.c
+    ${_su}/common/system/src/newlib/sbrk.c
+    ${_su}/common/system/src/newlib/startup.c
+    ${_su}/common/system/src/newlib/syscalls.c
+    ${_su}/common/system/src/newlib/cxx.cpp
+    ${_su}/common/system/src/stm32f4-hal/stm32f4xx_hal.c
+    ${_su}/common/system/src/stm32f4-hal/stm32f4xx_hal_cortex.c
+    ${_su}/common/system/src/stm32f4-hal/stm32f4xx_hal_flash.c
+    ${_su}/common/system/src/stm32f4-hal/stm32f4xx_hal_flash_ex.c
+    ${_su}/common/system/src/stm32f4-hal/stm32f4xx_hal_flash_ramfunc.c
+    ${_su}/common/system/src/stm32f4-hal/stm32f4xx_hal_gpio.c
+    ${_su}/common/system/src/stm32f4-hal/stm32f4xx_hal_iwdg.c
+    ${_su}/common/system/src/stm32f4-hal/stm32f4xx_hal_pwr.c
+    ${_su}/common/system/src/stm32f4-hal/stm32f4xx_hal_rcc.c
+)
+
+add_library(platform-board-hosted-xip-static-spi-flash INTERFACE)
+target_sources(platform-board-hosted-xip-static-spi-flash INTERFACE ${PLATFORM_SOURCES})
+set_source_files_properties(${PLATFORM_SOURCES} PROPERTIES COMPILE_OPTIONS "-fno-pic;-fhosted")
+target_include_directories(platform-board-hosted-xip-static-spi-flash INTERFACE
+    ${_repo}/test/platforms/board/include
+    ${_su}/common/firmware/include
+    ${_su}/common/system/include/cmsis
+    ${_su}/common/system/include/stm32f4-hal
+    ${_su}/common/system/include/cortexm
+    ${_su}/common/system/include/arm
+    ${_su}/common/system/include
+)
+target_compile_definitions(platform-board-hosted-xip-static-spi-flash INTERFACE
+    DEBUG USE_FULL_ASSERT OS_USE_SEMIHOSTING TRACE OS_USE_TRACE_SEMIHOSTING_DEBUG
+    STM32F411xE USE_HAL_DRIVER ${XIP_BOARD_DEFS}
+    HARD_FLOAT
+    OS_INCLUDE_STARTUP_GUARD_CHECKS=0
+)
+target_compile_options(platform-board-hosted-xip-static-spi-flash INTERFACE
+    $<$<COMPILE_LANGUAGE:CXX>:-include;${_repo}/test-xip/common/include/abort_fix.h>
+)
+target_link_libraries(platform-board-hosted-xip-static-spi-flash INTERFACE stdc++ m)
+
+separate_arguments(SCL_MCU_FLAG_LIST UNIX_COMMAND "${SCL_MCU_FLAGS}")
+execute_process(COMMAND ${CMAKE_CXX_COMPILER} ${SCL_MCU_FLAG_LIST} -print-file-name=libsupc++.a
+                OUTPUT_VARIABLE SCL_LIBSUPCXX OUTPUT_STRIP_TRAILING_WHITESPACE)
+execute_process(COMMAND ${CMAKE_CXX_COMPILER} ${SCL_MCU_FLAG_LIST} -print-file-name=libgcc.a
+                OUTPUT_VARIABLE SCL_LIBGCC OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+# ---- firmware (uses xip::stat for true XIP — code in flash, data in RAM) ----
+add_executable(scl-fw-xip-static-spi-flash
+    src/main.cpp
+    ${_repo}/src/xip/static/adapter.cpp   # shared xip::stat (was a per-test copy)
+    ${_repo}/src/xip/xip-cross-call.c     # shared cross-lib trampoline (r10 swap)
+    src/fs-archive-spi.cpp
+    src/fs-archive-internal.cpp
+    ${_test3}/src/fs-archive.cpp
+    ${_test3}/src/flash-prog.c
+    ${_repo}/src/port/pic-trampoline.c   # pic_call_* (r10 setup)
+    ${_repo}/src/image-memory.cpp        # fw::image_arena (provision staging + RW segment)
+    ${_repo}/src/link-context.cpp        # fw::link_context::from_self (resolve vs main's .dynsym)
+    ${_repo}/src/dynamic-info.cpp        # parses main's _DYNAMIC (DT_HASH/SYMTAB/STRTAB)
+    ${_su}/common/system/src/stm32f4-hal/stm32f4xx_hal_spi.c
+    ${_su}/common/system/src/stm32f4-hal/stm32f4xx_hal_dma.c
+)
+set(_test_drv ${_repo}/test-static/test-drv)
+target_include_directories(scl-fw-xip-static-spi-flash PRIVATE
+    ${_test_drv}/fixtures/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${ST_XIP}/include
+    ${ST_XIP}/src
+    ${_test_static}/include
+    ${_test_static}/src
+    ${_test3}/include
+    ${SCL_ROOT}/include/scl
+    ${_repo}/include
+    ${_repo}/test-xip/common/include
+    ${_repo}/test-dynamic/test-flatfs-spi/include
+)
+target_link_libraries(scl-fw-xip-static-spi-flash PRIVATE
+    platform-board-hosted-xip-static-spi-flash
+    scl::xip-common
+    ${SCL_LIBSUPCXX}
+    ${SCL_LIBGCC}
+)
+target_compile_definitions(scl-fw-xip-static-spi-flash PRIVATE
+    DL_LIB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../fixtures"
+)
+
+target_link_options(scl-fw-xip-static-spi-flash PRIVATE
+    -pie
+    -nostartfiles --specs=nano.specs
+    LINKER:-Bsymbolic
+    LINKER:-E
+    LINKER:--unresolved-symbols=ignore-in-shared-libs
+    -T${ST_XIP}/src/sections-flatfs-hosted.ld
+    LINKER:-Map=$<TARGET_FILE:scl-fw-xip-static-spi-flash>.map
+    "LINKER:--defsym=_fs_base=0x08040000"
+    "LINKER:--defsym=_fs_size=0x20000"
+    -lstdc++
+)
+
+add_custom_command(TARGET scl-fw-xip-static-spi-flash POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:scl-fw-xip-static-spi-flash> $<TARGET_FILE:scl-fw-xip-static-spi-flash>.hex
+    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:scl-fw-xip-static-spi-flash> $<TARGET_FILE:scl-fw-xip-static-spi-flash>.bin
+)
+
+add_test(NAME scl-fw-xip-static-spi-flash
+         COMMAND ${SCL_TEST_DIR}/tools/flash-run.sh $<TARGET_FILE:scl-fw-xip-static-spi-flash>.hex
+         WORKING_DIRECTORY ${SCL_TEST_DIR}/..)

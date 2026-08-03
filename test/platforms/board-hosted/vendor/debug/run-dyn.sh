@@ -1,0 +1,22 @@
+#!/bin/bash
+# Flash + run + capture semihosting output (DYN variant) — OpenOCD only (no GDB)
+set -e
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(dirname "$SCRIPT_DIR")"
+export PATH="/home/dan/.local/xPacks/@xpack-dev-tools/openocd/0.12.0-7.1/.content/bin:/home/dan/.local/xPacks/@xpack-dev-tools/arm-none-eabi-gcc/15.2.1-1.1.1/.content/bin:$PATH"
+FIRMWARE="${1:-$ROOT/build_dyn/f411ce-dyn.elf}"
+LOG="${2:-dyn_output.log}"
+CFG="$(cd "$SCRIPT_DIR/../../../board" && pwd)/openocd-${SCL_BOARD:-weact}.cfg"
+
+SCRIPTS="/home/dan/.local/xPacks/@xpack-dev-tools/openocd/0.12.0-7.1/.content/openocd/scripts"
+killall -q openocd 2>/dev/null || true; sleep 1
+
+echo "Flashing and running $FIRMWARE..."
+openocd -s "$SCRIPTS" -f "$CFG" \
+    -c "init" \
+    -c "reset halt" \
+    -c "program $FIRMWARE" \
+    -c "arm semihosting enable" \
+    -c "reset run" \
+    -c "sleep 300000" \
+    -c "shutdown" 2>&1 | tee "$LOG"

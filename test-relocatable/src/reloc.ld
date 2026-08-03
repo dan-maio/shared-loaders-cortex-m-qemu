@@ -1,0 +1,1 @@
+/home/dan/Documents/shared-loaders-weact_agy/test-relocatable/platform/reloc.ld

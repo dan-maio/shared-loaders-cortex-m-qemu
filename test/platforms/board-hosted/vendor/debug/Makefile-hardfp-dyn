@@ -1,0 +1,96 @@
+# Makefile for hard-float firmware (dyn variant)
+# Uses -mfloat-abi=hard -mfpu=fpv4-sp-d16 throughout
+
+ARM_CC     ?= /home/dan/.local/xPacks/@xpack-dev-tools/arm-none-eabi-gcc/15.2.1-1.1.1/.content/bin/arm-none-eabi-gcc
+ARM_CXX    ?= /home/dan/.local/xPacks/@xpack-dev-tools/arm-none-eabi-gcc/15.2.1-1.1.1/.content/bin/arm-none-eabi-g++
+ARM_MCU     = -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
+ARM_OPT     = -O0 -ffunction-sections -fdata-sections -fno-inline-functions
+FW_FLAGS    = $(ARM_MCU) $(ARM_OPT) -g3
+FW_DEFS     = -DDEBUG -DUSE_FULL_ASSERT -DOS_USE_SEMIHOSTING -DTRACE \
+              -DOS_USE_TRACE_SEMIHOSTING_DEBUG -DSTM32F411xE -DUSE_HAL_DRIVER \
+              -DHSE_VALUE=8000000
+FW_CXXFLAGS = -std=c++23 -fno-exceptions -fno-rtti \
+              -fno-use-cxa-atexit -fno-threadsafe-statics \
+              -fno-move-loop-invariants
+
+REPO       = ../../f411re-dynloader
+COMMON     = $(REPO)/common
+COREINC    = -I$(COMMON)/core/include
+FWINC      = -I$(COMMON)/firmware/include \
+             -I$(COMMON)/system/include/cmsis -I$(COMMON)/system/include/stm32f4-hal \
+             -I$(COMMON)/system/include/cortexm -I$(COMMON)/system/include/arm \
+             -I$(COMMON)/system/include
+LIBS_OUT   = ../../projects/libs/build
+FW_SO_LIBS = $(LIBS_OUT)/hf_test1.so $(LIBS_OUT)/hf_test2.so
+FW_ODIR    = build_hf/obj
+FW_BIN     = build_hf/f411re-dynloader-hf
+
+PROJ_DYN   = ../../projects/dyn
+
+CORE_CPP  = $(COMMON)/core/src/elf-image.cpp $(COMMON)/core/src/relocator.cpp \
+            $(COMMON)/core/src/symbol-resolver.cpp
+FW_CPP    = $(COMMON)/firmware/src/dynamic-linker.cpp \
+            $(COMMON)/firmware/src/image-memory.cpp \
+            $(COMMON)/firmware/src/patch-journal.cpp \
+            $(COMMON)/firmware/src/semihost-file.cpp \
+            $(COMMON)/firmware/src/link-context.cpp \
+            $(COMMON)/firmware/src/led.cpp \
+            $(COMMON)/firmware/src/timer.cpp \
+            $(PROJ_DYN)/firmware/src/main.cpp \
+            $(PROJ_DYN)/firmware/src/dl-impl.cpp
+FW_C      = $(COMMON)/firmware/src/initialize-hardware.c \
+            $(COMMON)/firmware/src/stm32f4xx_hal_msp.c
+SYS_C     = $(COMMON)/system/src/cmsis/system_stm32f4xx.c \
+            $(COMMON)/system/src/cmsis/vectors_stm32f411xe.c \
+            $(COMMON)/system/src/cortexm/exception-handlers.c \
+            $(COMMON)/system/src/cortexm/initialize-hardware.c \
+            $(COMMON)/system/src/cortexm/reset-hardware.c \
+            $(COMMON)/system/src/diag/trace.c $(COMMON)/system/src/diag/trace-impl.c \
+            $(COMMON)/system/src/newlib/assert.c $(COMMON)/system/src/newlib/exit.c \
+            $(COMMON)/system/src/newlib/sbrk.c $(COMMON)/system/src/newlib/startup.c \
+            $(COMMON)/system/src/newlib/syscalls.c
+HAL_C     = $(COMMON)/system/src/stm32f4-hal/stm32f4xx_hal.c \
+            $(COMMON)/system/src/stm32f4-hal/stm32f4xx_hal_cortex.c \
+            $(COMMON)/system/src/stm32f4-hal/stm32f4xx_hal_flash.c \
+            $(COMMON)/system/src/stm32f4-hal/stm32f4xx_hal_flash_ex.c \
+            $(COMMON)/system/src/stm32f4-hal/stm32f4xx_hal_flash_ramfunc.c \
+            $(COMMON)/system/src/stm32f4-hal/stm32f4xx_hal_gpio.c \
+            $(COMMON)/system/src/stm32f4-hal/stm32f4xx_hal_iwdg.c \
+            $(COMMON)/system/src/stm32f4-hal/stm32f4xx_hal_pwr.c \
+            $(COMMON)/system/src/stm32f4-hal/stm32f4xx_hal_rcc.c
+
+ALL_OBJS  = $(CORE_CPP:%.cpp=$(FW_ODIR)/%.o) \
+            $(FW_CPP:%.cpp=$(FW_ODIR)/%.o) $(FW_C:%.c=$(FW_ODIR)/%.o) \
+            $(SYS_C:%.c=$(FW_ODIR)/%.o) $(HAL_C:%.c=$(FW_ODIR)/%.o)
+
+.PHONY: all firmware clean libs
+all: firmware
+
+$(FW_ODIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(ARM_CXX) -c $(FW_FLAGS) $(FW_DEFS) $(FWINC) $(COREINC) $(FW_CXXFLAGS) -o $@ $<
+
+$(FW_ODIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(ARM_CC) -c $(FW_FLAGS) $(FW_DEFS) $(FWINC) -std=gnu11 -o $@ $<
+
+firmware: libs $(FW_BIN).elf
+
+$(FW_BIN).elf: $(ALL_OBJS)
+	@mkdir -p $(dir $(FW_BIN))
+	$(ARM_CXX) $(ARM_MCU) -Wl,-Map=$(FW_BIN).map \
+		-nostartfiles --specs=nano.specs -u _printf_float \
+		-T $(COMMON)/ldscripts/mem-sh.ld -T $(COMMON)/ldscripts/libs-sh.ld \
+		-T $(PROJ_DYN)/ldscripts/sections-sh.ld \
+		-Wl,--gc-sections -Wl,--export-dynamic \
+		-Wl,--dynamic-list=../../f411re-dynloader/firmware/dynamic-symbols.def \
+		-Wl,--allow-shlib-undefined $(FW_SO_LIBS) \
+		-o $@ $^ -lstdc++ -lm
+	$(ARM_CC) -O binary $@ $(FW_BIN).bin 2>/dev/null || true
+	arm-none-eabi-size $@
+
+libs:
+	$(MAKE) -C test_hardfp all
+
+clean:
+	rm -rf build_hf

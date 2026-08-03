@@ -1,0 +1,20 @@
+build/
+build_*/
+build-*/
+test/build-*/
+*.o
+*.map
+*.lst
+*.hex
+*.bin
+*.elf
+__pycache__/
+*.so
+test-drv (copy 1)/
+test-drv (copy 1)/
+test-drv (Module class)/
+test-drv (Module-class direct-calls)/
+test-drv (copy 1)/
+
+# Claude Code per-machine settings (permissions etc.) — not shared
+.claude/settings.local.json
