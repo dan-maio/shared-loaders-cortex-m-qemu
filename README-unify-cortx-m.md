@@ -198,15 +198,25 @@ test/platforms/
 ### 4.1 One command: `board` + `test`
 
 ```sh
+# two options, key=value form
 ./build-and-run.sh board=<nucleo|weact> test=<name> [abi=sf|hf]
-# positional form
+
+# positional form (board comes first)
+./build-and-run.sh <board> <name> [abi=sf|hf]
 ./build-and-run.sh weact dyn2
+./build-and-run.sh nucleo ovl1
 ```
 
-`board=` selects the target board (only board boot/init changes). `test=` picks
-the firmware app to configure, build, flash and run — the same names as in the
-original projects. The semihosting console streams to the terminal; **Ctrl-C**
-stops. Run it with no arguments for the full test list.
+`<board>` / `board=` selects the target board (`nucleo` or `weact`; only board
+boot/init changes). `<name>` / `test=` picks the firmware app to configure,
+build, flash and run — the same names as in the original projects. The
+semihosting console streams to the terminal; **Ctrl-C** stops. Run it with no
+arguments for the full test list.
+
+The same `<board> <target>` positional form works in every per-tree
+`build-and-run.sh` (`test-dynamic/`, `test-overlay/`, `test-static/`,
+`test-relocatable/`, `test-xip/`); when the board is omitted they fall back to
+the `SCL_BOARD` environment variable (default `weact`).
 
 Available tests:
 
@@ -226,7 +236,7 @@ Examples:
 ```sh
 ./build-and-run.sh board=weact  test=dyn2                    # freestanding on WeAct
 ./build-and-run.sh board=nucleo test=ovl1                    # overlay on NUCLEO
-./build-and-run.sh board=nucleo test=newlib2-sf abi=sf       # hosted, soft float
+./build-and-run.sh nucleo newlib2-sf abi=sf                  # hosted, soft float (positional)
 ./build-and-run.sh board=weact  test=newlib2-hf abi=hf       # hosted, hard float
 ./build-and-run.sh board=weact  test=xip-static/spi-flash    # SPI + XIP (WeAct only)
 ```
