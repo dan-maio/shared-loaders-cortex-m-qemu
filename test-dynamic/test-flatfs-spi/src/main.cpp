@@ -86,7 +86,7 @@ static bool provision_name(const char* name) {
 }
 
 /* Read a provisioned blob back from the W25Q64 and check its CRC32 against the
- * archive TOC entry, so a corrupt SPI write is caught immediately. */
+ * archive TOC entry. Runs at the current clock (provisioning clock here). */
 static bool verify_blob(const char* name) {
     const fw::FsEntry* e = fw::fs_find(name);
     if (!e) return false;
@@ -104,13 +104,10 @@ static bool verify_blob(const char* name) {
 int main() {
     trace_puts("\n=== flatfs-spi (HAL-based SPI driver) ===\n");
 
-    /* Bring the PLL up FIRST (100 MHz) so SPI provisioning and the battery both
-     * run on the same clock (SPI1 /4 = 25 MHz). board_init() is now idempotent
-     * (SWS guard), so battery_run()'s own board_init() is a safe no-op. */
-    spi_flash_init();          /* HAL at HSI (correct SysTick for HAL_InitTick) */
-    board_init();              /* HSE 25 MHz -> PLL 100 MHz + SysTick@100 MHz   */
-    spi_flash_reinit();        /* re-init SPI1 for the 100 MHz clock            */
-    trace_puts("SPI flash init OK (PLL 100 MHz, SPI 25 MHz)\n");
+    /* SPI init at HSI 16MHz (before battery's PLL config) */
+
+    spi_flash_init();
+    trace_puts("SPI flash init OK\n");
 
     uint8_t mid, tid;
     if (flash.read_id(&mid, &tid)) {
@@ -129,7 +126,7 @@ int main() {
                            "libcppsh.so","notelf.bin" };
     for (auto lib : libs) provision_name(lib);
 
-    trace_puts("\nVerify read-back (CRC32)...\n");
+    trace_puts("\nVerify read-back (CRC32, HSI clock)...\n");
     unsigned vbad = 0;
     for (auto lib : libs) {
         if (verify_blob(lib)) { trace_puts("  verify OK: "); trace_puts(lib); trace_puts("\n"); }

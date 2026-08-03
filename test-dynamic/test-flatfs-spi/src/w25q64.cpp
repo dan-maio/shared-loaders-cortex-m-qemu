@@ -6,15 +6,6 @@
 #define CS_PORT   GPIOA
 #define CS_PIN    GPIO_PIN_4
 
-/* SPI1 baud-rate prescaler (APB2 clock). At 100 MHz APB2 the stock /4 = 25 MHz
- * is marginal for page-program/erase on some W25Q64 boards (dupont wiring /
- * clones corrupt multi-page writes and large reads — only sub-256-byte
- * transfers stayed intact). /8 = 12.5 MHz keeps reads fast but well within the
- * part's timing; override with -DSPI_BAUD_PRESC=<n> to tune. */
-#ifndef SPI_BAUD_PRESC
-#define SPI_BAUD_PRESC SPI_BAUDRATEPRESCALER_8
-#endif
-
 static SPI_HandleTypeDef spi_handle;
 
 w25q64::w25q64()
@@ -58,7 +49,7 @@ void w25q64::power_up()
   spi_handle.Init.CLKPolarity = SPI_POLARITY_LOW;
   spi_handle.Init.CLKPhase = SPI_PHASE_1EDGE;
   spi_handle.Init.NSS = SPI_NSS_SOFT;
-  spi_handle.Init.BaudRatePrescaler = SPI_BAUD_PRESC;
+  spi_handle.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
   spi_handle.Init.FirstBit = SPI_FIRSTBIT_MSB;
   spi_handle.Init.TIMode = SPI_TIMODE_DISABLE;
   spi_handle.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
