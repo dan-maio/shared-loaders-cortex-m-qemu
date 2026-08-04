@@ -30,6 +30,11 @@ endif()
 # Define the custom platform target that includes CMSIS, ST HAL, diag/trace, and LEDs (omitting default timer.cpp)
 set(_su ${_repo}/test/platforms/board-hosted/vendor)
 include(${_repo}/test-xip/cmake/qemu-xip.cmake)
+# The interrupt app shares the dynamic-nolib flat_fs linker script (it has no
+# local one); override the hardware path that qemu-xip.cmake assumes is local.
+if(NOT SCL_PLATFORM STREQUAL "qemu-f411re")
+    set(XIP_FLATFS_LD ${_repo}/test-xip/test-xip-dynamic-nolib/test1/src/sections-flatfs-hosted.ld)
+endif()
 
 set(PLATFORM_SOURCES
     ${_repo}/test-xip/common/src/semihost-file.cpp
