@@ -37,7 +37,11 @@ endif()
 # Define the custom platform target that includes CMSIS, ST HAL, diag/trace, timers, and LEDs
 set(_su ${_repo}/test/platforms/board-hosted/vendor)
 include(${_repo}/test-xip/cmake/qemu-xip.cmake)
-set(XIP_FLATFS_LD ${XIP_QEMU_LD_NEWLIB})
+# The newlib app uses the QEMU flat_fs linker script (FLASH_FS in CCM SRAM)
+# ONLY under QEMU; on hardware it uses the real flash-backed script.
+if(SCL_PLATFORM STREQUAL "qemu-f411re")
+    set(XIP_FLATFS_LD ${XIP_QEMU_LD_NEWLIB})
+endif()
 
 set(PLATFORM_SOURCES
     ${_repo}/test-xip/common/src/semihost-file.cpp
