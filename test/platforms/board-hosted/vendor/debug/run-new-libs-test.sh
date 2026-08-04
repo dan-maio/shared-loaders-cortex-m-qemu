@@ -48,9 +48,7 @@ openocd -s "$SCRIPTS" -f "$CFG" \
     -c "program $FIRMWARE" \
     -c "arm semihosting enable" \
     $CMDLINE \
-    -c "reset run" \
-    -c "sleep 300000" \
-    -c "shutdown" 2>&1 | tee test_output.log
+    -c "reset run"
 
 echo "=== Done. Output in test_output.log ==="
 grep -E 'PASS|FAIL|HardFault|test' test_output.log 2>/dev/null || true

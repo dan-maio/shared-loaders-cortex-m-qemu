@@ -17,6 +17,4 @@ openocd -s "$SCRIPTS" -f "$CFG" \
     -c "reset halt" \
     -c "program $FIRMWARE" \
     -c "arm semihosting enable" \
-    -c "reset run" \
-    -c "sleep 300000" \
-    -c "shutdown" 2>&1 | tee "$LOG"
+    -c "reset run"

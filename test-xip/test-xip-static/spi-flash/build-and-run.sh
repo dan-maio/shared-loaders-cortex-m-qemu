@@ -36,8 +36,6 @@ killall openocd 2>/dev/null || true
     -c "program $HEX verify" \
     -c "arm semihosting enable" \
     -c "arm semihosting_cmdline -c $FIXTURES/libspi.so $FIXTURES/libuart.so $FIXTURES/libled.so $FIXTURES/libcpp_features.so" \
-    -c "reset run" \
-    -c "sleep $RUN_MS" \
-    -c "shutdown" 2>&1 | tee "$BUILD/run.log"
+    -c "reset run"
 
 echo "=== console captured at $BUILD/run.log ==="

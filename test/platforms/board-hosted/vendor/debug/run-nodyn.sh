@@ -18,8 +18,6 @@ openocd -s "$SCRIPTS" -f "$CFG" \
     -c "program $FIRMWARE" \
     -c "arm semihosting enable" \
     -c "arm semihosting_cmdline f411ce-no_dyn /tmp/mylib1.so /tmp/mylib2.so /tmp/g.so" \
-    -c "reset run" \
-    -c "sleep 300000" \
-    -c "shutdown" 2>&1 | tee "$LOG"
+    -c "reset run"
 
 echo "Output saved to $LOG"

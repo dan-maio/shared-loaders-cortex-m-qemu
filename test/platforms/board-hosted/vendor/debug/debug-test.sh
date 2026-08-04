@@ -18,6 +18,4 @@ exec openocd -s "$SCRIPTS" -f "$CFG" \
     -c "reset halt" \
     -c "program $TEST_BIN" \
     -c "arm semihosting enable" \
-    -c "reset run" \
-    -c "sleep 300000" \
-    -c "shutdown"
+    -c "reset run"
