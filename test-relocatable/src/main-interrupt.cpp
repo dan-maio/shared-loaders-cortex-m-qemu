@@ -362,6 +362,9 @@ static std::size_t load_symtab() noexcept {
     trace_puts("[symtab] opening ");
     trace_puts(FIRMWARE_ELF_PATH);
     trace_puts("\n");
+    if (auto elf_res = fw::semihost_file::open("test-relocatable/build/" FIRMWARE_ELF_PATH)) {
+        return parse_elf_symbols(*elf_res);
+    }
     if (auto elf_res = fw::semihost_file::open(FIRMWARE_ELF_PATH)) {
         return parse_elf_symbols(*elf_res);
     }
