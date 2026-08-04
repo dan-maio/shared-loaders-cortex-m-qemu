@@ -299,11 +299,9 @@ void board_spi_write(const uint8_t* buf, unsigned len)
 void led_set(int on)
 {
 #if defined(SCL_BOARD_NUCLEO)
-    /* NUCLEO-F411RE LD2 on PA5 is ACTIVE-HIGH: HIGH = on. */
     GPIOA_BSRR = on ? (1u << LED_PIN) : (1u << (LED_PIN + 16));
 #else
-    /* WEACT-F411CE LED on PC13 is ACTIVE-LOW: LOW = on. */
-    GPIOC_BSRR = on ? (1u << (LED_PIN + 16)) : (1u << LED_PIN);
+    GPIOC_BSRR = on ? (1u << LED_PIN) : (1u << (LED_PIN + 16));
 #endif
 }
 
