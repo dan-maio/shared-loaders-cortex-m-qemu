@@ -313,8 +313,17 @@ contains a space.
 | `qemu-run-all.sh` | build and run every test family under QEMU |
 | `cleaner.sh` | remove all build trees |
 
-`flash-run.sh` runs until Ctrl-C. The `build-and-run.sh` runners are
-non-interactive: OpenOCD runs the firmware for `RUN_MS` (default 5 min; the
+`flash-run.sh` runs until Ctrl-C. Use `--timeout <ms>` for auto-shutdown (useful
+for CI or batch runs), and `--log <file>` to capture the console:
+
+```sh
+test/tools/flash-run.sh --timeout 30000 scl-fw-dyn1          # stop after 30s
+test/tools/flash-run.sh --timeout 60000 --log run.log scl-fw-dyn2
+RUN_MS=120000 test/tools/flash-run.sh scl-fw-flatfs           # via env var
+```
+
+The `build-and-run.sh` runners are
+non-interactive for XIP tests: OpenOCD runs the firmware for `RUN_MS` (default 5 min; the
 `spi-flash` scenario uses 20 min because provisioning over semihosting and the
 SPI writes are slow), then shuts down. Override it:
 

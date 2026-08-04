@@ -135,15 +135,5 @@ else
 
     echo "=== flash + run $APP (semihosting console -> $LOG) ==="
     killall openocd 2>/dev/null || true
-    "$OPENOCD" -s "$OPENOCD_SCRIPTS" -f "$CFG" \
-        -c "init" \
-        -c "reset halt" \
-        -c "flash erase_address 0x08040000 0x40000" \
-        -c "program $HEX verify" \
-        -c "arm semihosting enable" \
-        -c "reset run" \
-        -c "sleep $RUN_MS" \
-        -c "shutdown" 2>&1 | tee "$LOG"
-
-    echo "=== console captured at $LOG ==="
+    exec "$ROOT/test/tools/flash-run.sh" --timeout "$RUN_MS" --log "$LOG" "$HEX"
 fi

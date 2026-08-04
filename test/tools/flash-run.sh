@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 # flash-run.sh — flash a test firmware .hex and run it with semihosting console.
 #
-# Usage:  flash-run.sh <path/to/app.hex>
-#         Ctrl-C to stop. The semihosting console (trace_puts) prints here.
+# Usage:  flash-run.sh [--timeout <ms>] [--log <file>] <path/to/app.hex>
+#
+# Options:
+#   --timeout <ms>   auto-shutdown OpenOCD after <ms> milliseconds (default:
+#                    interactive, Ctrl-C to stop). Also settable via RUN_MS env.
+#   --log <file>     tee the semihosting console to <file> in addition to stdout.
+#   -h|--help        this text
+#
+# Without --timeout the script blocks on OpenOCD's stdout until Ctrl-C.
+# With --timeout, OpenOCD runs the firmware for the specified duration then
+# shuts down cleanly (the XIP build-and-run.sh uses this mode with RUN_MS).
 #
 # Semihosting MUST be enabled before "reset run" (a BKPT 0xAB with semihosting
 # off faults into a double fault / lockup). No "verify": its target-side CRC
@@ -11,6 +20,19 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HERE/../../tools-config.sh"
+
+# --- parse options ---
+TIMEOUT="${RUN_MS:-}"    # default: empty = interactive (no auto-shutdown)
+LOGFILE=""
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --timeout) TIMEOUT="$2"; shift 2 ;;
+        --log)     LOGFILE="$2"; shift 2 ;;
+        -h|--help) show_help; exit 0 ;;
+        *)         POSITIONAL+=("$1"); shift ;;
+    esac
+done
 
 # Target board selects the OpenOCD flash config: NUCLEO-F411RE uses its on-board
 # ST-LINK (openocd-nucleo.cfg), WEACT-F411CE uses its CMSIS-DAP (openocd-weact.cfg).
@@ -56,10 +78,16 @@ show_help() {
         name="flash-run-${SCL_DYNAMIC_NEWLIB_VARIANT}.sh"
     fi
     cat <<EOF
-Usage: $name <app-name|path/to/app.hex>
+Usage: $name [--timeout <ms>] [--log <file>] <app-name|path/to/app.hex>
 
 Flashes a test firmware .hex and runs it with semihosting console.
-Ctrl-C to stop. The semihosting console (trace_puts) prints here.
+
+Options:
+  --timeout <ms>  auto-shutdown after <ms> ms (default: interactive, Ctrl-C to stop)
+  --log <file>    tee console output to file
+
+Without --timeout the firmware runs until Ctrl-C.
+With --timeout, OpenOCD shuts down automatically after the specified duration.
 
 Valid app names:
   scl-fw-dyn1
@@ -75,16 +103,19 @@ Or specify a path to any custom compiled .hex file.
 Static app newlib variants can be controlled via wrappers:
   flash-run-sf.sh <app-name|hex>   - soft-float variant (sf)
   flash-run-hf.sh <app-name|hex>   - hard-float variant (hf)
+
+Environment:
+  RUN_MS          default timeout in ms (overridden by --timeout)
+  SCL_BOARD       nucleo|weact (default weact)
 EOF
 }
 
-if [[ $# -eq 0 ]]; then
+if [[ ${#POSITIONAL[@]} -eq 0 ]]; then
     show_help
     exit 1
-elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    show_help
-    exit 0
 fi
+
+set -- "${POSITIONAL[@]}"
 
 case "$1" in
   scl-fw-dyn1|scl-fw-dyn2|scl-fw-ovl1|scl-fw-flatfs|scl-fw-gotplt-demo|scl-fw-flatfs-spi|scl-fw-flatfs-bitbang-spi)
@@ -143,13 +174,29 @@ if [[ "$1" == *flatfs* ]]; then
   CMDLINE_ARGS=(-c "arm semihosting_cmdline -c c1.so c2.so cpp3.so libcppeh.so ehx_catch.so notelf.bin")
 fi
 
-exec "$OPENOCD" -s "$OPENOCD_SCRIPTS" \
-  -f "$CFG" \
-  -c "init" \
-  -c "reset halt" \
-  -c "program $HEX" \
-  -c "arm semihosting enable" \
-  "${CMDLINE_ARGS[@]}" \
+# Build the OpenOCD command line.
+OPENOCD_CMD=(
+  "$OPENOCD" -s "$OPENOCD_SCRIPTS"
+  -f "$CFG"
+  -c "init"
+  -c "reset halt"
+  -c "program $HEX"
+  -c "arm semihosting enable"
+  "${CMDLINE_ARGS[@]}"
   -c "reset run"
+)
 
+# With --timeout (or RUN_MS), append sleep + shutdown so OpenOCD exits cleanly
+# after the specified duration. Without it, OpenOCD runs until Ctrl-C.
+if [[ -n "$TIMEOUT" ]]; then
+    echo "timeout: ${TIMEOUT}ms (auto-shutdown)"
+    OPENOCD_CMD+=(-c "sleep $TIMEOUT" -c "shutdown")
+fi
 
+# With --log, tee the semihosting console to the log file.
+if [[ -n "$LOGFILE" ]]; then
+    echo "logging to: $LOGFILE"
+    exec "${OPENOCD_CMD[@]}" 2>&1 | tee "$LOGFILE"
+else
+    exec "${OPENOCD_CMD[@]}"
+fi

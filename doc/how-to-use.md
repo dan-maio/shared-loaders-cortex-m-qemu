@@ -315,5 +315,49 @@ build-and-run.sh board=<nucleo|weact|qemu> test=<name>
 
 ## Capturing Console Output & Stopping Tests
 
-* **Hardware (nucleo/weact)**: Each script compiles the target, flashes it onto the target device, enables semihosting, and prints the firmware console trace messages directly to the terminal stdout. Press `Ctrl-C` to cancel the script and shut down the OpenOCD connection.
-* **QEMU**: The runner (`qemu-run.sh`) captures the semihosting console to a log file and prints it after the run completes. The runner automatically shuts down when a `--done` marker is detected, or after a timeout (default 120s). The pass/fail verdict is printed at the end.
+### Hardware (nucleo/weact)
+
+There are two modes for hardware test termination:
+
+**Interactive mode** (default): `flash-run.sh` replaces itself with OpenOCD,
+which runs the firmware indefinitely. The semihosting console streams directly
+to your terminal. Press **Ctrl-C** to terminate OpenOCD and release the board.
+
+```bash
+test/tools/flash-run.sh scl-fw-dyn1          # runs until Ctrl-C
+```
+
+**Timed mode** (`--timeout`): OpenOCD runs the firmware for the specified
+duration, then shuts down cleanly. Useful for CI, batch runs, or when you want
+the script to exit automatically.
+
+```bash
+test/tools/flash-run.sh --timeout 30000 scl-fw-dyn1   # stop after 30 seconds
+RUN_MS=60000 test/tools/flash-run.sh scl-fw-dyn2       # 60s via env var
+```
+
+The XIP `build-and-run.sh` uses timed mode automatically (`RUN_MS` defaults to
+300000 = 5 minutes). Override it:
+
+```bash
+RUN_MS=120000 test-xip/build-and-run.sh static/semihosting
+```
+
+**Log capture** (`--log`): tee the console to a file alongside stdout:
+
+```bash
+test/tools/flash-run.sh --timeout 30000 --log /tmp/run.log scl-fw-dyn1
+```
+
+**Stopping a stuck process**: if OpenOCD does not respond to Ctrl-C:
+
+```bash
+killall openocd
+```
+
+### QEMU
+
+The runner (`qemu-run.sh`) captures the semihosting console to a log file and
+prints it after the run completes. The runner automatically shuts down when a
+`--done` marker is detected, or after a timeout (default 120s). The pass/fail
+verdict is printed at the end.
