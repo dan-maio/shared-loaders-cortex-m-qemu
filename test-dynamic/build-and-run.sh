@@ -101,7 +101,7 @@ if [[ "$TARGET" == dynamic-newlib/* ]]; then
     else
         echo "=== configure: hosted newlib, $ABI ($BUILD) ==="
         cmake -S "$HERE/test-dynamic-newlib" -B "$BUILD" \
-              -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/arm-none-eabi-hosted.cmake" -DSCL_BOARD="$SCL_BOARD" $EXTRA
+              -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/arm-none-eabi-hosted.cmake" -DSCL_PLATFORM=board -DSCL_BOARD="$SCL_BOARD" $EXTRA
     fi
 else
     BUILD="$HERE/build"
@@ -112,7 +112,7 @@ else
               -DSCL_PLATFORM=qemu-f411re
     else
         echo "=== configure: freestanding ($BUILD) ==="
-        cmake -S "$HERE" -B "$BUILD" -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/arm-none-eabi.cmake" -DSCL_BOARD="$SCL_BOARD"
+        cmake -S "$HERE" -B "$BUILD" -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/arm-none-eabi.cmake" -DSCL_PLATFORM=board -DSCL_BOARD="$SCL_BOARD"
     fi
 fi
 

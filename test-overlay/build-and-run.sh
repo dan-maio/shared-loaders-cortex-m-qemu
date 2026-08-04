@@ -62,7 +62,7 @@ if [[ $IS_QEMU -eq 1 ]]; then
     cmake -S "$HERE" -B "$BUILD" -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/arm-none-eabi.cmake" \
           -DSCL_PLATFORM=qemu-f411re
 else
-    cmake -S "$HERE" -B "$BUILD" -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/arm-none-eabi.cmake" -DSCL_BOARD="$SCL_BOARD"
+    cmake -S "$HERE" -B "$BUILD" -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/arm-none-eabi.cmake" -DSCL_PLATFORM=board -DSCL_BOARD="$SCL_BOARD"
 fi
 
 echo "=== build $APP ==="

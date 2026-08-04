@@ -87,7 +87,7 @@ case "$TARGET" in
               -DSCL_PLATFORM=qemu-f411re
     else
         cmake -S "$HERE" -B "$BUILD" \
-              -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/arm-none-eabi.cmake" -DSCL_BOARD="$SCL_BOARD"
+              -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/arm-none-eabi.cmake" -DSCL_PLATFORM=board -DSCL_BOARD="$SCL_BOARD"
     fi
     cmake --build "$BUILD" --target "$T_TARGET" -j
 

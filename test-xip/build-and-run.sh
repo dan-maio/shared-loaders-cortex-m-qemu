@@ -113,7 +113,7 @@ if [[ $IS_QEMU -eq 1 ]]; then
           -DSCL_PLATFORM=qemu-f411re $EXTRA_CMAKE_OPTS
 else
     cmake -S "$HERE" -B "$BUILD" -DCMAKE_TOOLCHAIN_FILE="$ROOT/$TOOLCHAIN" \
-          -DSCL_BOARD="$SCL_BOARD" $EXTRA_CMAKE_OPTS
+          -DSCL_PLATFORM=board -DSCL_BOARD="$SCL_BOARD" $EXTRA_CMAKE_OPTS
 fi
 
 echo "=== rebuild all libs with XIP split segments (r10-based PIC) ==="
