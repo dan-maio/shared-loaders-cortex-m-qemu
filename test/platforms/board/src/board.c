@@ -303,6 +303,10 @@ void led_set(int on)
 #else
     GPIOC_BSRR = on ? (1u << LED_PIN) : (1u << (LED_PIN + 16));
 #endif
+    /* Report the LED state over semihosting (same trace as the QEMU board). */
+    extern void trace_puts(const char*);
+    extern void trace_putc(char);
+    trace_puts("[LED:"); trace_puts(on ? "ON" : "OFF"); trace_puts("]\n");
 }
 
 void led_toggle(void)
