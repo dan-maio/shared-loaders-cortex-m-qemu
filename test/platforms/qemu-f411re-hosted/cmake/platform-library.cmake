@@ -1,8 +1,8 @@
 # HOSTED platform library for the QEMU emulated NUCLEO-F411RE (CMSIS + ST HAL +
 # newlib) — the environment the hosted static loader (scl::dynamic-newlib,
 # SCL_HOSTED) needs. This is the QEMU counterpart of
-# platforms/nucleo-f411re-hosted: it reuses the vendored CMSIS/HAL/newlib tree
-# under ../nucleo-f411re-hosted/vendor but drives the clock with a QEMU-friendly
+# platforms/board-hosted: it reuses the vendored CMSIS/HAL/newlib tree
+# under ../board-hosted/vendor but drives the clock with a QEMU-friendly
 # config (the emulated RCC never signals HSE/PLL ready, so the hardware bring-up
 # would hang) and reports LED state over semihosting.
 #
@@ -10,10 +10,10 @@
 message(VERBOSE "Including platforms/qemu-f411re-hosted/platform-library.cmake...")
 
 get_filename_component(STATIC_UNIFY_DIR
-    ${CMAKE_CURRENT_LIST_DIR}/../../nucleo-f411re-hosted/vendor ABSOLUTE)
+    ${CMAKE_CURRENT_LIST_DIR}/../../board-hosted/vendor ABSOLUTE)
 if(NOT EXISTS ${STATIC_UNIFY_DIR}/common/system)
     message(FATAL_ERROR "vendored hosted platform not found under "
-                        "test/platforms/nucleo-f411re-hosted/vendor/")
+                        "test/platforms/board-hosted/vendor/")
 endif()
 
 set(QEMU_PLATFORM_DIR ${CMAKE_CURRENT_LIST_DIR}/..)
