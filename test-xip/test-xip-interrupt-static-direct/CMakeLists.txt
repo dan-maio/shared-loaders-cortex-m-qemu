@@ -27,6 +27,7 @@ else()
 endif()
 
 set(_su ${_repo}/test/platforms/board-hosted/vendor)
+include(${_repo}/test-xip/cmake/qemu-xip.cmake)
 set(ST_XIP ${_repo}/test-xip/test-xip-static/semihosting)
 set(ST_XIPD ${_repo}/test-xip/test-xip-static-direct)
 
@@ -34,8 +35,9 @@ set(ST_XIPD ${_repo}/test-xip/test-xip-static-direct)
 set(PLATFORM_SOURCES
     ${_repo}/test-xip/common/src/semihost-file.cpp
     ${_su}/common/firmware/src/scl-log-trace.cpp
-    ${_su}/common/firmware/src/led.cpp
-    ${_su}/common/firmware/src/initialize-hardware.c
+    ${XIP_LED}
+    ${XIP_FS_FILL}
+    ${XIP_INIT}
     ${_su}/common/firmware/src/stm32f4xx_hal_msp.c
     ${_su}/common/system/src/cmsis/system_stm32f4xx.c
     ${_su}/common/system/src/cmsis/vectors_stm32f411xe.c
@@ -147,7 +149,7 @@ target_link_options(scl-fw-xip-interrupt-static-direct PRIVATE
     LINKER:-Bsymbolic
     LINKER:-E
     LINKER:--unresolved-symbols=ignore-in-shared-libs
-    -T${CMAKE_CURRENT_SOURCE_DIR}/src/sections-flatfs-hosted.ld
+    -T${XIP_FLATFS_LD}
     LINKER:-Map=$<TARGET_FILE:scl-fw-xip-interrupt-static-direct>.map
     -L${CMAKE_CURRENT_SOURCE_DIR}/../fixtures
     -l:slib.so -l:mylib1.so -l:mylib2.so -l:c1.so -l:c2.so -l:cpp3.so -l:libprov.so -l:libcons.so -l:libcppsh.so -lstdc++
@@ -158,6 +160,13 @@ add_custom_command(TARGET scl-fw-xip-interrupt-static-direct POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:scl-fw-xip-interrupt-static-direct> $<TARGET_FILE:scl-fw-xip-interrupt-static-direct>.bin
 )
 
-add_test(NAME scl-fw-xip-interrupt-static-direct
-         COMMAND ${SCL_TEST_DIR}/tools/flash-run.sh $<TARGET_FILE:scl-fw-xip-interrupt-static-direct>.hex
-         WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+if(XIP_RUNNER)
+    add_test(NAME scl-fw-xip-interrupt-static-direct
+             COMMAND ${XIP_RUNNER} --machine ${XIP_MACHINE}
+                     --done "regular tests done" $<TARGET_FILE:scl-fw-xip-interrupt-static-direct>
+             WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+else()
+    add_test(NAME scl-fw-xip-interrupt-static-direct
+             COMMAND ${SCL_TEST_DIR}/tools/flash-run.sh $<TARGET_FILE:scl-fw-xip-interrupt-static-direct>.hex
+             WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+endif()

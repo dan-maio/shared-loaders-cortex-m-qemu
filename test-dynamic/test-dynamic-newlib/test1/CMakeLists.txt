@@ -24,15 +24,16 @@ if(NOT SCL_HOSTED OR NOT TARGET scl-dynamic-newlib)
     return()
 endif()
 
-set(SCL_PLATFORM "board-hosted" CACHE STRING "Unified hosted platform (do not change; board is SCL_BOARD)")
-include(${CMAKE_CURRENT_SOURCE_DIR}/../../../test/platforms/board-hosted/cmake/platform-library.cmake)
+set(SCL_PLATFORM "board" CACHE STRING
+    "Target platform (board for nucleo/weact, or qemu-f411re for qemu-system-arm)")
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../../test/platforms/${SCL_PLATFORM}-hosted/cmake/platform-library.cmake)
 
 add_executable(scl-fw-dynamic-newlib1
     src/main.cpp
     ${STATIC_UNIFY_DIR}/firmware/src/dl-impl.cpp   # the dl:: facade (vendored)
 )
 target_include_directories(scl-fw-dynamic-newlib1 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(scl-fw-dynamic-newlib1 PRIVATE platform::board-hosted scl::dynamic-newlib)
+target_link_libraries(scl-fw-dynamic-newlib1 PRIVATE platform::${SCL_PLATFORM}-hosted scl::dynamic-newlib)
 target_compile_definitions(scl-fw-dynamic-newlib1 PRIVATE DYN
     SCL_SO_DIR="${STATIC_UNIFY_DIR}/libs/build$<$<BOOL:${SCL_HF}>:_hf>"
     FIRMWARE_ELF_PATH="$<TARGET_FILE:scl-fw-dynamic-newlib1>")
@@ -59,9 +60,20 @@ add_custom_target(scl-dynamic-newlib1-libs
     COMMENT "Building vendored static fixture libraries (.so)")
 add_dependencies(scl-fw-dynamic-newlib1 scl-dynamic-newlib1-libs)
 
-# On-target run: flash + semihosting console via OpenOCD (board required).
-# Not linked -pie, but flash the .hex anyway for uniformity with the other apps.
-add_test(NAME scl-fw-dynamic-newlib1
-         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../../test/tools/flash-run.sh
-                 $<TARGET_FILE:scl-fw-dynamic-newlib1>.hex
-         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+# Run: execute the firmware under QEMU (qemu-f411re-hosted) with semihosting,
+# or flash it via OpenOCD (board-hosted).
+string(TOUPPER "${SCL_PLATFORM}" _SCL_PLATFORM_UPPER)
+string(REPLACE "-" "_" _SCL_PLATFORM_VAR "${_SCL_PLATFORM_UPPER}")
+set(_runner "${PLATFORM_${_SCL_PLATFORM_VAR}_HOSTED_RUNNER}")
+if(_runner)
+    add_test(NAME scl-fw-dynamic-newlib1
+             COMMAND ${_runner} --machine ${PLATFORM_${_SCL_PLATFORM_VAR}_HOSTED_QEMU_MACHINE}
+                     --done "RESULT:" $<TARGET_FILE:scl-fw-dynamic-newlib1>
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+else()
+    # Not linked -pie, but flash the .hex anyway for uniformity with the other apps.
+    add_test(NAME scl-fw-dynamic-newlib1
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../../test/tools/flash-run.sh
+                     $<TARGET_FILE:scl-fw-dynamic-newlib1>.hex
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+endif()

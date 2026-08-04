@@ -36,13 +36,16 @@ endif()
 
 # Define the custom platform target that includes CMSIS, ST HAL, diag/trace, timers, and LEDs
 set(_su ${_repo}/test/platforms/board-hosted/vendor)
+include(${_repo}/test-xip/cmake/qemu-xip.cmake)
+set(XIP_FLATFS_LD ${XIP_QEMU_LD_NEWLIB})
 
 set(PLATFORM_SOURCES
     ${_repo}/test-xip/common/src/semihost-file.cpp
     ${_su}/common/firmware/src/scl-log-trace.cpp
-    ${_su}/common/firmware/src/led.cpp
+    ${XIP_LED}
+    ${XIP_FS_FILL}
     ${_su}/common/firmware/src/timer.cpp
-    ${_su}/common/firmware/src/initialize-hardware.c
+    ${XIP_INIT}
     ${_su}/common/firmware/src/stm32f4xx_hal_msp.c
     ${_su}/common/system/src/cmsis/system_stm32f4xx.c
     ${_su}/common/system/src/cmsis/vectors_stm32f411xe.c
@@ -149,7 +152,7 @@ target_link_options(scl-fw-xip-newlib1 PRIVATE
     -nostartfiles --specs=nano.specs
     LINKER:-Bsymbolic
     LINKER:-E
-    -T${CMAKE_CURRENT_SOURCE_DIR}/src/sections-flatfs-hosted.ld
+    -T${XIP_FLATFS_LD}
     LINKER:--gc-sections
     LINKER:-Map=$<TARGET_FILE:scl-fw-xip-newlib1>.map
 )
@@ -173,6 +176,13 @@ add_custom_command(TARGET scl-fw-xip-newlib1 POST_BUILD
 )
 
 # Test run
-add_test(NAME scl-fw-xip-newlib1
-         COMMAND ${SCL_TEST_DIR}/tools/flash-run.sh $<TARGET_FILE:scl-fw-xip-newlib1>.hex
-         WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+if(XIP_RUNNER)
+    add_test(NAME scl-fw-xip-newlib1
+             COMMAND ${XIP_RUNNER} --machine ${XIP_MACHINE}
+                     --done "scl-fw-xip-newlib1: done" $<TARGET_FILE:scl-fw-xip-newlib1>
+             WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+else()
+    add_test(NAME scl-fw-xip-newlib1
+             COMMAND ${SCL_TEST_DIR}/tools/flash-run.sh $<TARGET_FILE:scl-fw-xip-newlib1>.hex
+             WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+endif()

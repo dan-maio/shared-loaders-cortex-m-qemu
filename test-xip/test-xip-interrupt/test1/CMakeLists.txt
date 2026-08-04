@@ -29,12 +29,14 @@ endif()
 
 # Define the custom platform target that includes CMSIS, ST HAL, diag/trace, and LEDs (omitting default timer.cpp)
 set(_su ${_repo}/test/platforms/board-hosted/vendor)
+include(${_repo}/test-xip/cmake/qemu-xip.cmake)
 
 set(PLATFORM_SOURCES
     ${_repo}/test-xip/common/src/semihost-file.cpp
     ${_su}/common/firmware/src/scl-log-trace.cpp
-    ${_su}/common/firmware/src/led.cpp
-    ${_su}/common/firmware/src/initialize-hardware.c
+    ${XIP_LED}
+    ${XIP_FS_FILL}
+    ${XIP_INIT}
     ${_su}/common/firmware/src/stm32f4xx_hal_msp.c
     ${_su}/common/system/src/cmsis/system_stm32f4xx.c
     ${_su}/common/system/src/cmsis/vectors_stm32f411xe.c
@@ -140,7 +142,7 @@ target_link_options(scl-fw-xip-interrupt1 PRIVATE
     -nostartfiles --specs=nano.specs
     LINKER:-Bsymbolic
     LINKER:-E
-    -T${_repo}/test-xip/test-xip-dynamic-nolib/test1/src/sections-flatfs-hosted.ld
+    -T${XIP_FLATFS_LD}
     LINKER:--gc-sections
     LINKER:-Map=$<TARGET_FILE:scl-fw-xip-interrupt1>.map
 )
@@ -152,6 +154,13 @@ add_custom_command(TARGET scl-fw-xip-interrupt1 POST_BUILD
 )
 
 # Test run
-add_test(NAME scl-fw-xip-interrupt1
-         COMMAND ${SCL_TEST_DIR}/tools/flash-run.sh $<TARGET_FILE:scl-fw-xip-interrupt1>.hex
-         WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+if(XIP_RUNNER)
+    add_test(NAME scl-fw-xip-interrupt1
+             COMMAND ${XIP_RUNNER} --machine ${XIP_MACHINE}
+                     --done "regular tests done" $<TARGET_FILE:scl-fw-xip-interrupt1>
+             WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+else()
+    add_test(NAME scl-fw-xip-interrupt1
+             COMMAND ${SCL_TEST_DIR}/tools/flash-run.sh $<TARGET_FILE:scl-fw-xip-interrupt1>.hex
+             WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+endif()

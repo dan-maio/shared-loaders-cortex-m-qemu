@@ -28,13 +28,15 @@ else()
 endif()
 
 set(_su ${_repo}/test/platforms/board-hosted/vendor)
+include(${_repo}/test-xip/cmake/qemu-xip.cmake)
 
 # ---- hosted platform (own target name so it coexists with the nolib test) ---
 set(PLATFORM_SOURCES
     ${_repo}/test-xip/common/src/semihost-file.cpp
     ${_su}/common/firmware/src/scl-log-trace.cpp
-    ${_su}/common/firmware/src/led.cpp
-    ${_su}/common/firmware/src/initialize-hardware.c
+    ${XIP_LED}
+    ${XIP_FS_FILL}
+    ${XIP_INIT}
     ${_su}/common/firmware/src/stm32f4xx_hal_msp.c
     ${_su}/common/system/src/cmsis/system_stm32f4xx.c
     ${_su}/common/system/src/cmsis/vectors_stm32f411xe.c
@@ -142,7 +144,7 @@ target_link_options(scl-fw-xip-interrupt-static PRIVATE
     -nostartfiles --specs=nano.specs
     LINKER:-Bsymbolic
     LINKER:-E
-    -T${CMAKE_CURRENT_SOURCE_DIR}/src/sections-flatfs-hosted.ld
+    -T${XIP_FLATFS_LD}
     LINKER:--gc-sections
     LINKER:-Map=$<TARGET_FILE:scl-fw-xip-interrupt-static>.map
 )
@@ -152,6 +154,13 @@ add_custom_command(TARGET scl-fw-xip-interrupt-static POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:scl-fw-xip-interrupt-static> $<TARGET_FILE:scl-fw-xip-interrupt-static>.bin
 )
 
-add_test(NAME scl-fw-xip-interrupt-static
-         COMMAND ${SCL_TEST_DIR}/tools/flash-run.sh $<TARGET_FILE:scl-fw-xip-interrupt-static>.hex
-         WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+if(XIP_RUNNER)
+    add_test(NAME scl-fw-xip-interrupt-static
+             COMMAND ${XIP_RUNNER} --machine ${XIP_MACHINE}
+                     --done "regular tests done" $<TARGET_FILE:scl-fw-xip-interrupt-static>
+             WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+else()
+    add_test(NAME scl-fw-xip-interrupt-static
+             COMMAND ${SCL_TEST_DIR}/tools/flash-run.sh $<TARGET_FILE:scl-fw-xip-interrupt-static>.hex
+             WORKING_DIRECTORY ${SCL_TEST_DIR}/..)
+endif()

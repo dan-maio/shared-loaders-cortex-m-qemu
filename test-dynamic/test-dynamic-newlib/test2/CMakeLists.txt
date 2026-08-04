@@ -20,8 +20,9 @@ if(NOT SCL_HOSTED OR NOT TARGET scl-dynamic-newlib)
     return()
 endif()
 
-set(SCL_PLATFORM "board-hosted" CACHE STRING "Unified hosted platform (do not change; board is SCL_BOARD)")
-include(${CMAKE_CURRENT_SOURCE_DIR}/../../../test/platforms/board-hosted/cmake/platform-library.cmake)
+set(SCL_PLATFORM "board" CACHE STRING
+    "Target platform (board for nucleo/weact, or qemu-f411re for qemu-system-arm)")
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../../test/platforms/${SCL_PLATFORM}-hosted/cmake/platform-library.cmake)
 
 add_executable(scl-fw-dynamic-newlib2
     ${STATIC_UNIFY_DIR}/firmware/src/main.cpp      # DYN battery (includes tests-dyn.cpp)
@@ -30,7 +31,7 @@ add_executable(scl-fw-dynamic-newlib2
 target_include_directories(scl-fw-dynamic-newlib2 PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${STATIC_UNIFY_DIR}/firmware/src)              # tests-dyn.cpp textual include
-target_link_libraries(scl-fw-dynamic-newlib2 PRIVATE platform::board-hosted scl::dynamic-newlib)
+target_link_libraries(scl-fw-dynamic-newlib2 PRIVATE platform::${SCL_PLATFORM}-hosted scl::dynamic-newlib)
 target_compile_definitions(scl-fw-dynamic-newlib2 PRIVATE DYN
     FIRMWARE_ELF_PATH="$<TARGET_FILE:scl-fw-dynamic-newlib2>")
 # Keep-alive anchors: the union of what every fixture .so imports from main
@@ -77,10 +78,21 @@ else()
     add_dependencies(scl-fw-dynamic-newlib2 scl-dynamic-newlib2-libs)
 endif()
 
-# On-target run: stage the .so fixtures into /tmp (the suite's hardcoded
-# dlopen paths), then flash + semihosting console.
-add_test(NAME scl-fw-dynamic-newlib2
-         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../../test/tools/run-with-tmp-fixtures.sh
-                 ${STATIC_UNIFY_DIR}/libs/build$<$<BOOL:${SCL_HF}>:_hf>
-                 $<TARGET_FILE:scl-fw-dynamic-newlib2>.hex
-         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+# Run: execute under QEMU (qemu-f411re-hosted) or flash via OpenOCD.
+string(TOUPPER "${SCL_PLATFORM}" _SCL_PLATFORM_UPPER)
+string(REPLACE "-" "_" _SCL_PLATFORM_VAR "${_SCL_PLATFORM_UPPER}")
+set(_runner "${PLATFORM_${_SCL_PLATFORM_VAR}_HOSTED_RUNNER}")
+if(_runner)
+    add_test(NAME scl-fw-dynamic-newlib2
+             COMMAND ${_runner} --machine ${PLATFORM_${_SCL_PLATFORM_VAR}_HOSTED_QEMU_MACHINE}
+                     --done "ALL OK" $<TARGET_FILE:scl-fw-dynamic-newlib2>
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+else()
+    # On-target run: stage the .so fixtures into /tmp (the suite's hardcoded
+    # dlopen paths), then flash + semihosting console.
+    add_test(NAME scl-fw-dynamic-newlib2
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../../test/tools/run-with-tmp-fixtures.sh
+                     ${STATIC_UNIFY_DIR}/libs/build$<$<BOOL:${SCL_HF}>:_hf>
+                     $<TARGET_FILE:scl-fw-dynamic-newlib2>.hex
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+endif()
