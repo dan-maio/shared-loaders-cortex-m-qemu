@@ -21,20 +21,26 @@ get_filename_component(SCL_ROOT ${SCL_ROOT} ABSOLUTE)
 add_subdirectory(${SCL_ROOT} scl)
 enable_testing()
 
-# Unified freestanding platform serves both boards; the active board selects the
-# SCL_BOARD_* boot/init switch (clock source/speed, LED pin) in board.c/board.h.
-set(SCL_PLATFORM "board" CACHE STRING "Unified platform (do not change; board is SCL_BOARD)")
-set(PLAT ${SCL_ROOT}/test/platforms/${SCL_PLATFORM})   # reuse the PLAIN sources only
-set(PLAT_COMMON ${SCL_ROOT}/test/platforms/common)      # board-independent glue
+# Platform selection: board (nucleo/weact hardware) or qemu-f411re (emulated).
+set(SCL_PLATFORM "board" CACHE STRING "Target platform (board for nucleo/weact, or qemu-f411re for QEMU)")
+set(PLAT ${SCL_ROOT}/test/platforms/${SCL_PLATFORM})
+set(PLAT_COMMON ${SCL_ROOT}/test/platforms/common)
 
-# Board boot/init switch + HSE value (see test/platforms/board/include/board.h).
-set(SCL_BOARD "weact" CACHE STRING "Target board (nucleo or weact)")
-if(SCL_BOARD STREQUAL "nucleo")
-    set(BOARD_DEFS SCL_BOARD_NUCLEO=1 HSE_VALUE=16000000)
-elseif(SCL_BOARD STREQUAL "weact")
-    set(BOARD_DEFS SCL_BOARD_WEACT=1 HSE_VALUE=25000000)
+# Board boot/init switch + HSE value.
+if(SCL_PLATFORM STREQUAL "qemu-f411re")
+    set(SCL_BOARD "qemu")
+    set(BOARD_DEFS "")
+elseif(SCL_PLATFORM STREQUAL "board")
+    set(SCL_BOARD "weact" CACHE STRING "Target board (nucleo or weact)")
+    if(SCL_BOARD STREQUAL "nucleo")
+        set(BOARD_DEFS SCL_BOARD_NUCLEO=1 HSE_VALUE=16000000)
+    elseif(SCL_BOARD STREQUAL "weact")
+        set(BOARD_DEFS SCL_BOARD_WEACT=1 HSE_VALUE=25000000)
+    else()
+        message(FATAL_ERROR "SCL_BOARD must be 'nucleo' or 'weact' (got '${SCL_BOARD}')")
+    endif()
 else()
-    message(FATAL_ERROR "SCL_BOARD must be 'nucleo' or 'weact' (got '${SCL_BOARD}')")
+    message(FATAL_ERROR "SCL_PLATFORM must be 'board' or 'qemu-f411re' (got '${SCL_PLATFORM}')")
 endif()
 
 add_executable(scl-fw-reloc
