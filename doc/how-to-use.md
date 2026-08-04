@@ -1,13 +1,16 @@
 # SCL Loader Workspace — Test Execution Guide (`how-to-use.md`)
 
-This guide summarizes how to configure, build, flash, and run the various firmware loaders and test batteries on either of the two supported boards:
-the **WEACT-F411CE** (BlackPill, CMSIS-DAP probe) or the **NUCLEO-F411RE**
-(ST-LINK probe). Both boards share this single codebase; only board boot/init
-and the OpenOCD flash config differ, selected with `-DSCL_BOARD=nucleo|weact`
-(default `weact`).
+This guide summarizes how to configure, build, flash, and run the various firmware loaders and test batteries on any of the three supported targets:
+
+* **WEACT-F411CE** (BlackPill, CMSIS-DAP probe) — real hardware
+* **NUCLEO-F411RE** (ST-LINK probe) — real hardware
+* **QEMU** (emulated STM32F411RE, `-machine netduinoplus2`) — no board needed
+
+All three share this single codebase; only board boot/init differs. The target
+is selected with `board=<nucleo|weact|qemu>` (default `weact`).
 
 The **one-command entry point** is the repo-root
-[`build-and-run.sh`](../README.md): `./build-and-run.sh board=<nucleo|weact>
+[`build-and-run.sh`](../README.md): `./build-and-run.sh board=<nucleo|weact|qemu>
 test=<name>`. The per-tree `build-and-run.sh` scripts (`test-dynamic/`,
 `test-relocatable/`, `test-xip/`, …) also accept the `SCL_BOARD` environment
 variable and automate the compile-flash-run cycle.
@@ -17,8 +20,9 @@ variable and automate the compile-flash-run cycle.
 ## Prerequisites
 
 * **ARM GCC Toolchain**: `arm-none-eabi-gcc` must be available (the scripts automatically add the default xPack toolchain path to your `PATH` variable).
-* **OpenOCD**: Must be available at `$OPENOCD` or on your `PATH`.
-* **Hardware Connection**: A WEACT-F411CE board connected via CMSIS-DAP, or a NUCLEO-F411RE via its on-board ST-LINK, to your USB port.
+* **OpenOCD** (hardware only): Must be available at `$OPENOCD` or on your `PATH`. Not needed for QEMU targets.
+* **QEMU** (emulation only): `qemu-system-arm` must be available at `$QEMU` or on your `PATH`. Not needed for hardware targets.
+* **Hardware Connection** (hardware only): A WEACT-F411CE board connected via CMSIS-DAP, or a NUCLEO-F411RE via its on-board ST-LINK, to your USB port.
 
 ---
 
@@ -112,17 +116,19 @@ Without these flags, modules load in **copy-whole mode** (everything in RAM).
 
 ## 4. Full Build-to-Flash Pipeline (Step by Step)
 
-Every `build_and_run.sh` script follows the same end-to-end path from source code to running firmware on the board. Here is each stage in detail:
+Every `build_and_run.sh` script follows the same end-to-end path from source code to running firmware. The pipeline differs between hardware (OpenOCD) and QEMU targets:
 
 ### Stage 1 — Environment Setup (`tools-config.sh`)
 
-When you invoke `./test/build_and_run.sh dyn1`, the script first sources `tools-config.sh` from the repository root. This sets three critical environment variables:
+When you invoke `./build-and-run.sh board=qemu test=dyn1`, the script first sources `tools-config.sh` from the repository root. This sets the critical environment variables:
 
 | Variable | Purpose | Default |
 |:---|:---|:---|
 | `ARM_TOOLCHAIN_BIN` | Path to `arm-none-eabi-gcc` | xPack toolchain at `~/.local/xPacks/.../bin` |
-| `OPENOCD` | Path to the `openocd` binary | xPack OpenOCD at `~/.local/xPacks/.../bin/openocd` |
-| `OPENOCD_SCRIPTS` | OpenOCD's built-in script directory | xPack OpenOCD `.../openocd/scripts` |
+| `OPENOCD` | Path to the `openocd` binary (hardware only) | xPack OpenOCD at `~/.local/xPacks/.../bin/openocd` |
+| `OPENOCD_SCRIPTS` | OpenOCD's built-in script directory (hardware only) | xPack OpenOCD `.../openocd/scripts` |
+| `QEMU` | Path to `qemu-system-arm` (QEMU only) | `qemu-system-arm` on PATH |
+| `ARM_GDB` | Path to `arm-none-eabi-gdb` (QEMU debug only) | xPack toolchain `.../bin/arm-none-eabi-gdb` |
 
 The ARM toolchain bin directory is prepended to `PATH` so that `arm-none-eabi-gcc`, `arm-none-eabi-objcopy`, and `arm-none-eabi-readelf` are all available.
 
@@ -131,8 +137,15 @@ The ARM toolchain bin directory is prepended to `PATH` so that `arm-none-eabi-gc
 The script runs CMake to generate the build system, pointing at the ARM cross-compilation toolchain file:
 
 ```bash
+# Hardware target (nucleo/weact):
 cmake -S <source-dir> -B <build-dir> \
-      -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake
+      -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+      -DSCL_BOARD=weact
+
+# QEMU target:
+cmake -S <source-dir> -B <build-dir> \
+      -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+      -DSCL_PLATFORM=qemu-f411re
 ```
 
 The toolchain file (`cmake/arm-none-eabi.cmake`) tells CMake to use `arm-none-eabi-gcc` as the C/C++ compiler and sets MCU-specific flags (`-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard`). CMake discovers all source files, resolves dependencies, and generates Makefiles under the build directory.
@@ -167,19 +180,21 @@ cp -f "$STAGE_DIR"/*.so /tmp/
 
 The firmware loads shared libraries from hardcoded `/tmp/*.so` paths via semihosting. An ABI guard verifies that the staged fixtures' float ABI (hard-float vs soft-float) matches the firmware to prevent HardFault (NOCP) exceptions.
 
-### Stage 5 — Flash & Run (`flash-run.sh`)
+### Stage 5 — Run Backend (Hardware vs QEMU)
 
-The `build_and_run.sh` script delegates to `flash-run.sh`:
+The `build_and_run.sh` script branches based on the selected board:
+
+**Hardware (nucleo/weact)** — delegates to `flash-run.sh`:
 
 ```bash
 exec test/tools/flash-run.sh <path/to/firmware.hex>
 ```
 
-`flash-run.sh` resolves the `.hex` path (either directly or by searching build trees), then launches OpenOCD:
+`flash-run.sh` resolves the `.hex` path, then launches OpenOCD:
 
 ```bash
 openocd -s "$OPENOCD_SCRIPTS" \
-  -f test/platforms/board/openocd-${SCL_BOARD:-weact}.cfg \
+  -f test/platforms/board/openocd-${SCL_BOARD}.cfg \
   -c "init" \
   -c "reset halt" \
   -c "program $HEX" \
@@ -187,17 +202,26 @@ openocd -s "$OPENOCD_SCRIPTS" \
   -c "reset run"
 ```
 
-### Stage 6 — OpenOCD Hardware Interaction
+**QEMU** — delegates to `qemu-run.sh`:
 
-The OpenOCD configuration (`openocd.cfg`) sets up the debug connection:
+```bash
+exec test/tools/qemu-run.sh --machine netduinoplus2 \
+    --done "battery: done" --need-led 1 \
+    <path/to/firmware.elf>
+```
 
-| Setting | Value | Meaning |
+`qemu-run.sh` boots the ELF directly under `qemu-system-arm` with semihosting enabled. No flashing is needed — QEMU loads the firmware into its emulated memory.
+
+### Stage 6a — OpenOCD Hardware Interaction (nucleo/weact)
+
+The OpenOCD configuration (`openocd-<board>.cfg`) sets up the debug connection:
+
+| Setting | WEACT-F411CE | NUCLEO-F411RE |
 |:---|:---|:---|
-| `interface` | `cmsis-dap` | Use CMSIS-DAP debug probe |
-| `vid_pid` | `0x1a86 0x8011` | USB vendor/product ID for the probe |
-| `transport` | `swd` | Serial Wire Debug (2-wire protocol) |
-| `target` | `stm32f4x.cfg` | STM32F4 family configuration |
-| `adapter speed` | `2000` | 2 MHz SWD clock |
+| `interface` | `cmsis-dap` | `st-link` |
+| `transport` | `swd` | `swd` |
+| `target` | `stm32f4x.cfg` | `stm32f4x.cfg` |
+| `adapter speed` | 2000 kHz | 2000 kHz |
 
 OpenOCD then performs these operations in sequence:
 
@@ -209,30 +233,52 @@ OpenOCD then performs these operations in sequence:
 
 For XIP targets, OpenOCD additionally erases the second Flash bank (`0x08040000`, 256 KB) before programming, since XIP modules execute directly from that region.
 
+### Stage 6b — QEMU Emulation (qemu)
+
+QEMU boots the firmware directly from the ELF file. The key differences from hardware:
+
+| Aspect | Hardware (OpenOCD) | QEMU |
+|:---|:---|:---|
+| Firmware format | `.hex` (Intel HEX) | `.elf` (ELF with symbols) |
+| Flash programming | Erase + write via SWD | Not needed (QEMU loads into emulated memory) |
+| Semihosting output | Via debug probe (BKPT 0xAB) | Via QEMU's semihosting support (BKPT 0xAB) |
+| Semihosting cmdline | `arm semihosting_cmdline` in OpenOCD | `--arg` flags to `qemu-run.sh` |
+| LED observation | GPIO register writes | Semihosting trace (`[LED:ON]`/`[LED:OFF]`) |
+| Clock configuration | HSE → PLL → 100 MHz | Stays on reset HSI (16 MHz); timing irrelevant |
+| Flash filesystem | Real NOR flash sectors 6–7 | CCM SRAM (0x10000000), pre-filled 0xFF |
+| Completion detection | Ctrl-C to stop OpenOCD | `--done` marker triggers automatic shutdown |
+| GDB debugging | OpenOCD GDB stub | QEMU built-in GDB stub (`qemu-gdb.sh`) |
+
+The QEMU runner (`qemu-run.sh`) provides automatic pass/fail verdicts based on:
+- **Done markers** (`--done`): completion strings like `"battery: done"` or `"RESULT: ALL PASS"`
+- **Fail markers**: HardFault, `FAIL`, `FAILED`, `(FAILURES) ==`
+- **LED toggles** (`--need-led`): minimum number of `[LED:]` reports
+- **Flash provisioning** (`--need-flash`): flat_fs file count check
+
 ### Stage 7 — Firmware Execution & Console Capture
 
-Once `reset run` fires, the MCU boots:
+Once the firmware starts (either via OpenOCD `reset run` or QEMU boot):
 
 1. The Cortex-M4 vector table loads the stack pointer and reset handler address.
-2. `SystemInit()` configures the clock tree (HSE 25 MHz → PLL → 100 MHz SYSCLK).
+2. Board init configures the clock tree (hardware: HSE → PLL → 100 MHz; QEMU: stays on HSI 16 MHz).
 3. `main()` initializes the SCL loader, loads fixture libraries via `dlopen`/`dlsym`, and runs the test battery.
-4. Every `trace_puts("...")` call triggers a semihosting BKPT (`0xAB`) that OpenOCD intercepts and prints to your terminal.
+4. Every `trace_puts("...")` call triggers a semihosting BKPT (`0xAB`) that the host intercepts and prints to your terminal.
 
-The script blocks on OpenOCD's stdout, so the test output streams live to your terminal. Press `Ctrl-C` to terminate OpenOCD and release the board.
+For hardware targets, the script blocks on OpenOCD's stdout; press `Ctrl-C` to terminate. For QEMU targets, the runner automatically detects the completion marker and shuts down; the pass/fail verdict is printed.
 
 ### Visual Pipeline Summary
 
 ```
-build_and_run.sh <target>
+build-and-run.sh board=<nucleo|weact|qemu> test=<name>
        │
        ▼
 ┌──────────────────────────┐
-│ source tools-config.sh   │  ARM_TOOLCHAIN_BIN, OPENOCD, OPENOCD_SCRIPTS
+│ source tools-config.sh   │  ARM_TOOLCHAIN_BIN, OPENOCD/QEMU, OPENOCD_SCRIPTS
 └──────────┬───────────────┘
            ▼
 ┌──────────────────────────┐
 │ cmake -S ... -B ...      │  Generate Makefiles with ARM cross-toolchain
-│   -DCMAKE_TOOLCHAIN_FILE │
+│   -DCMAKE_TOOLCHAIN_FILE │  -DSCL_BOARD=weact OR -DSCL_PLATFORM=qemu-f411re
 └──────────┬───────────────┘
            ▼
 ┌──────────────────────────┐
@@ -244,25 +290,30 @@ build_and_run.sh <target>
 │ cp *.so /tmp             │  Stage fixture libraries (dynamic loaders only)
 └──────────┬───────────────┘
            ▼
-┌──────────────────────────┐
-│ flash-run.sh <file>.hex  │
-│   └─ openocd             │
-│       ├─ init            │  Connect to MCU via SWD (CMSIS-DAP)
-│       ├─ reset halt      │  Freeze CPU
-│       ├─ program <>.hex  │  Erase + write Flash
-│       ├─ semihosting on  │  Enable trace output channel
-│       └─ reset run       │  Start firmware execution
-└──────────┬───────────────┘
-           ▼
-┌──────────────────────────┐
-│ MCU boots → main()       │  dlopen/dlsym tests run
-│ trace_puts → BKPT 0xAB  │  Semihosting → OpenOCD → your terminal
-└──────────────────────────┘
+           ├─────────────── board=nucleo|weact ──────────────┐
+           │                                                  │
+           ▼                                                  ▼
+┌──────────────────────────┐           ┌──────────────────────────┐
+│ flash-run.sh <file>.hex  │           │ qemu-run.sh <file>.elf   │
+│   └─ openocd             │           │   └─ qemu-system-arm     │
+│       ├─ init            │           │       ├─ -M netduinoplus2│
+│       ├─ reset halt      │           │       ├─ -semihosting    │
+│       ├─ program <>.hex  │           │       ├─ -kernel <>.elf  │
+│       ├─ semihosting on  │           │       └─ --done/--arg    │
+│       └─ reset run       │           └──────────┬───────────────┘
+└──────────┬───────────────┘                      │
+           ▼                                      ▼
+┌──────────────────────────────────────────────────────────┐
+│ MCU boots → main()                                        │
+│ trace_puts → BKPT 0xAB → host console                    │
+│ Hardware: OpenOCD streams output; Ctrl-C to stop          │
+│ QEMU: qemu-run.sh captures log; auto-shutdown on --done  │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Capturing Console Output & Stopping Tests
 
-* **Live Output**: Each script compiles the target, flashes it onto the target device, enables semihosting, and prints the firmware console trace messages directly to the terminal stdout.
-* **Termination**: Since the test firmware runs indefinitely inside semihosting, press `Ctrl-C` to cancel the script and shut down the OpenOCD connection.
+* **Hardware (nucleo/weact)**: Each script compiles the target, flashes it onto the target device, enables semihosting, and prints the firmware console trace messages directly to the terminal stdout. Press `Ctrl-C` to cancel the script and shut down the OpenOCD connection.
+* **QEMU**: The runner (`qemu-run.sh`) captures the semihosting console to a log file and prints it after the run completes. The runner automatically shuts down when a `--done` marker is detected, or after a timeout (default 120s). The pass/fail verdict is printed at the end.

@@ -3,9 +3,9 @@
 The one build/test recipe for the whole SCL. Run everything from the **repo
 root**; the SCL content *is* the root, with the `common-elf-reader` parser
 **vendored in place** at `./common-elf-reader` (no submodule, no links to
-external projects — everything is local). Both supported boards
-(**NUCLEO-F411RE** and **WEACT-F411CE**) share this single codebase; only board
-boot/init differs (`-DSCL_BOARD=nucleo|weact`).
+external projects — everything is local). Three targets are supported:
+**WEACT-F411CE**, **NUCLEO-F411RE**, and **QEMU** (emulated STM32F411RE). Only
+board boot/init differs (`board=weact|nucleo|qemu`).
 
 ## The modules and where their tests live
 

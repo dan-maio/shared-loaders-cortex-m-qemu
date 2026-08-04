@@ -14,10 +14,10 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Target board (nucleo|weact) is exported so the per-app build-and-run scripts
-# pick the right unified board init + OpenOCD flash config.
+# Target board (nucleo|weact|qemu) is exported so the per-app build-and-run scripts
+# pick the right platform init + runner.
 export SCL_BOARD="${SCL_BOARD:-weact}"
-case "$SCL_BOARD" in nucleo|weact) ;; *) echo "SCL_BOARD must be nucleo or weact (got '$SCL_BOARD')" >&2; exit 1 ;; esac
+case "$SCL_BOARD" in nucleo|weact|qemu) ;; *) echo "SCL_BOARD must be nucleo, weact or qemu (got '$SCL_BOARD')" >&2; exit 1 ;; esac
 
 # target -> subdirectory (relative to test-static/)
 declare -A TARGETS=(
@@ -37,8 +37,8 @@ usage() {
 
 if [[ $# -eq 0 || "$1" == "-h" || "$1" == "--help" ]]; then usage; exit 1; fi
 
-# Optional leading <board> positional (nucleo|weact); overrides SCL_BOARD env.
-if [[ "$1" == "nucleo" || "$1" == "weact" ]]; then
+# Optional leading <board> positional (nucleo|weact|qemu); overrides SCL_BOARD env.
+if [[ "$1" == "nucleo" || "$1" == "weact" || "$1" == "qemu" ]]; then
     export SCL_BOARD="$1"
     shift
     [[ $# -ge 1 ]] || { usage; exit 1; }

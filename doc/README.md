@@ -109,21 +109,35 @@ shared-lib-loaders (branch)   # SCL (10 libs) + common-elf-reader submodule + st
     │   ├── scl-test-app.cmake        # helper: one firmware app per testN
     │   └── toolchains/               # xpack-style toolchain registry
     ├── platforms/
-    │   ├── weact-f411ce-hosted/      # HOSTED platform (CMSIS/HAL/newlib) for the
-    │   │   └── vendor/               #   static loader — CMSIS/HAL/newlib + DYN
-    │   │                             #   suite + fixture-lib sources, VENDORED here
-    │   └── weact-f411ce/             # FREESTANDING board "platform library":
-    │       ├── cmake/platform-library.cmake  # INTERFACE target platform::weact-f411ce
-    │       ├── src/                  # startup.c, board.c, semihost.c, libc-shim.c,
-    │       │                         #   crt.cpp, semihost-file.cpp, dl-semihost.cpp
-    │       │                         #   (app-side dlopen), scl-log-semihost.cpp
-    │       ├── include/              # board.h, semihost.h, dl-semihost.hpp,
-    │       │                         #   fm-iface.h, cross-error.hpp
-    │       ├── ldscripts/            # mem.ld, sections.ld, mem-overlay.ld,
-    │       │                         #   sections-overlay.ld
-    │       └── openocd.cfg           # WeAct BlackPill CMSIS-DAP config
+    │   ├── board-hosted/           # HOSTED platform (CMSIS/HAL/newlib) for the
+    │   │   └── vendor/             #   static loader — CMSIS/HAL/newlib + DYN
+    │   │                           #   suite + fixture-lib sources, VENDORED here
+    │   ├── board/                  # FREESTANDING unified board platform:
+    │   │   ├── cmake/platform-library.cmake  # INTERFACE target platform::board
+    │   │   ├── src/                # startup.c, board.c, semihost.c, libc-shim.c,
+    │   │   │                       #   printf-shim.c (nucleo/weact variants)
+    │   │   ├── include/            # board.h, semihost.h, semihost-file.hpp,
+    │   │   │                       #   dl-semihost.hpp
+    │   │   ├── ldscripts/          # mem.ld, sections.ld, mem-overlay.ld,
+    │   │   │                       #   sections-overlay.ld, mem-flatfs.ld
+    │   │   ├── openocd-nucleo.cfg  # Nucleo-F411RE ST-LINK config
+    │   │   └── openocd-weact.cfg   # WeAct-F411CE CMSIS-DAP config
+    │   ├── qemu-f411re/            # QEMU freestanding platform:
+    │   │   ├── cmake/platform-library.cmake  # INTERFACE target platform::qemu-f411re
+    │   │   ├── src/                # QEMU board.c (no RCC polling, LED over
+    │   │   │                       #   semihosting), startup.c (0xFF fill for
+    │   │   │                       #   flat_fs), semihost.c, libc-shim.c, printf-shim.c
+    │   │   ├── include/            # board.h, semihost.h, semihost-file.hpp,
+    │   │   │                       #   dl-semihost.hpp
+    │   │   └── ldscripts/          # mem.ld, sections.ld, mem-overlay.ld,
+    │   │                           #   sections-overlay.ld, mem-flatfs.ld (CCM SRAM-backed)
+    │   └── qemu-f411re-hosted/     # QEMU hosted platform:
+    │       ├── cmake/platform-library.cmake  # INTERFACE target platform::qemu-f411re-hosted
+    │       └── src/                # led.cpp (semihosting trace), initialize-hardware.c
+    │                               #   (no HSE/PLL polling for QEMU)
     ├── tools/                # flash-run.sh + flash-run-sf.sh / flash-run-hf.sh
     │                         #   (flash by app NAME, resolved to its build tree)
+    │                         #   + qemu-run.sh, qemu-gdb.sh (QEMU runner + GDB)
     │                         #   + run-with-tmp-fixtures.sh (static2 /tmp staging)
     ├── common/               # shared test support headers/sources
     │   │                     #   (Memorybyte_source, loaded_image), test-main.cpp

@@ -21,5 +21,14 @@
 # OpenOCD Scripts
 : "${OPENOCD_SCRIPTS:=/home/dan/.local/xPacks/@xpack-dev-tools/openocd/0.12.0-7.1/.content/openocd/scripts}"
 
-# Export for child processes
-export ARM_TOOLCHAIN_BIN OPENOCD OPENOCD_SCRIPTS
+# QEMU (ARM system emulator, Cortex-M4)
+: "${QEMU:=$(which qemu-system-arm 2>/dev/null)}"
+: "${QEMU:=qemu-system-arm}"
+
+# arm-none-eabi-gdb (sits beside arm-none-eabi-gcc in the xPacks tree)
+: "${ARM_GDB:=$ARM_TOOLCHAIN_BIN/arm-none-eabi-gdb}"
+if ! command -v "$ARM_GDB" >/dev/null 2>&1; then
+    : "${ARM_GDB:=$(which arm-none-eabi-gdb 2>/dev/null)}"
+fi
+
+export ARM_TOOLCHAIN_BIN OPENOCD OPENOCD_SCRIPTS QEMU ARM_GDB

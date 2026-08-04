@@ -1,8 +1,11 @@
 # Building and Running the Tests
 
 Every test in this workspace is Cortex-M4 **firmware**: it is built with the ARM
-cross toolchain, flashed to a **WeAct BlackPill STM32F411CE** over CMSIS-DAP, and
-reports back over the semihosting console.
+cross toolchain, and run on either:
+- **Real hardware** — flashed to a WeAct BlackPill STM32F411CE or NUCLEO-F411RE
+  over OpenOCD, reporting back over the semihosting console.
+- **QEMU** — executed under `qemu-system-arm -machine netduinoplus2` with
+  semihosting, no board required.
 
 Run everything from the repo root unless a section says otherwise.
 
@@ -33,7 +36,9 @@ by default. Cloning fresh, do it in one step:
 git -c protocol.file.allow=always clone --recurse-submodules <url> <dir>
 ```
 
-OpenOCD 0.12.0 or newer, board attached over CMSIS-DAP.
+**For hardware targets:** OpenOCD 0.12.0 or newer, board attached over CMSIS-DAP (WeAct) or ST-LINK (Nucleo).
+
+**For QEMU targets:** `qemu-system-arm` (version 8.x or newer). No board needed. The QEMU variable in `tools-config.sh` defaults to whatever is on PATH.
 
 ---
 
@@ -56,8 +61,22 @@ naming rules.
 
 ## 3. Running a test
 
-Each tree has a `build-and-run.sh` that configures, builds, flashes and runs one
-app. **Target names are the subdirectory names with the `test-` prefix dropped,
+Each tree has a `build-and-run.sh` that configures, builds, and runs one app.
+The scripts accept a board argument as the first positional, or via `SCL_BOARD`:
+
+```sh
+# Hardware: WeAct BlackPill (default)
+./build-and-run.sh test=dyn1
+./build-and-run.sh board=weact test=dyn1
+
+# Hardware: Nucleo-F411RE
+./build-and-run.sh board=nucleo test=dyn1
+
+# QEMU: emulated STM32F411RE (no board needed)
+./build-and-run.sh board=qemu test=dyn1
+```
+
+**Target names are the subdirectory names with the `test-` prefix dropped,
 so the option is the path to the test.** Run any of them with no arguments to
 list its targets and the directory each maps to.
 
@@ -67,6 +86,13 @@ test-dynamic/build-and-run.sh      dynamic-nolib/test1
 test-static/build-and-run.sh       drv
 test-overlay/build-and-run.sh      test1
 test-relocatable/build-and-run.sh  reloc
+```
+
+The per-tree scripts also accept the board as the first positional:
+
+```sh
+test-dynamic/build-and-run.sh      qemu dynamic-nolib/test1
+test-relocatable/build-and-run.sh  nucleo reloc
 ```
 
 ### `test-xip/` — 8 targets
@@ -108,6 +134,52 @@ tree and toolchain file, so the runner forwards to the project's own script.
 
 `reloc`, `classic`, `classic-spi`, `interrupt`. This tree is a single project
 with several apps and no test subdirectories, so its options name the apps.
+`classic-spi` is WEACT-only (needs SPI wiring).
+
+---
+
+## 3b. Running under QEMU
+
+QEMU executes the firmware ELF directly under `qemu-system-arm -machine
+netduinoplus2` with semihosting. No hardware, no OpenOCD, no flashing.
+
+### What works under QEMU
+
+All non-SPI tests work under QEMU. SPI-dependent tests (`flatfs-spi`,
+`flatfs-bitbang-spi`, `drv`, `classic-spi`, `static/spi-flash`) are refused
+because the emulated board has no SPI model.
+
+### Running all QEMU tests at once
+
+```sh
+./qemu-run-all.sh              # build + run everything
+./qemu-run-all.sh --build-only # compile check only, no QEMU execution
+./qemu-run-all.sh --no-clean   # keep build trees after completion
+```
+
+### QEMU runner options
+
+The `qemu-run.sh` script provides automatic pass/fail detection:
+
+| Option | Meaning |
+|---|---|
+| `--machine <name>` | QEMU machine (default `netduinoplus2`) |
+| `--arg <str>` | Semihosting command-line argument (repeatable) |
+| `--done <marker>` | Completion marker; any one ends the run |
+| `--allow <pattern>` | Expected FAIL line (negative-path tests) |
+| `--timeout <secs>` | Hard stop (default 120) |
+| `--need-led <n>` | Require at least n LED toggles |
+| `--log <file>` | Save console log to file |
+| `--gdb` | Launch with GDB stub for interactive debugging |
+
+### QEMU + GDB debugging
+
+```sh
+test/tools/qemu-gdb.sh build/test-dynamic-nolib/test1/scl-fw-dyn1
+# Opens arm-none-eabi-gdb connected to QEMU's GDB stub
+(gdb) break main
+(gdb) continue
+```
 
 ---
 
@@ -231,10 +303,14 @@ contains a space.
 
 | Script | Does |
 |---|---|
-| `<tree>/build-and-run.sh` | configure + build + flash + run one target |
+| `build-and-run.sh` | top-level: configure + build + run one target (`board=<nucleo\|weact\|qemu> test=<name>`) |
+| `<tree>/build-and-run.sh` | per-tree: configure + build + run one target (accepts board as first positional) |
 | `test/tools/flash-run.sh` | flash and run an already-built app by name; searches the repo for the newest matching `.hex` |
 | `test/tools/flash-run-sf.sh` / `-hf.sh` | set the newlib ABI variant, stage fixtures, delegate to `flash-run.sh` |
-| `test-relocatable/tools/flash_reloc_run.sh` | one-step build + flash + run for the ET_REL apps |
+| `test/tools/qemu-run.sh` | run a firmware ELF under QEMU with semihosting and pass/fail detection |
+| `test/tools/qemu-gdb.sh` | run under QEMU with a GDB stub for interactive debugging |
+| `test/tools/qemu-run-with-tmp-fixtures.sh` | stage fixtures to /tmp, then delegate to `qemu-run.sh` |
+| `qemu-run-all.sh` | build and run every test family under QEMU |
 | `cleaner.sh` | remove all build trees |
 
 `flash-run.sh` runs until Ctrl-C. The `build-and-run.sh` runners are

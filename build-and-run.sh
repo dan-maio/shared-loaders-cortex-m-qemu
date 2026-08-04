@@ -3,7 +3,7 @@
 # selected board, from a single unified codebase.
 #
 # Usage:
-#   ./build-and-run.sh board=<nucleo|weact> test=<name> [abi=sf|hf]
+#   ./build-and-run.sh board=<nucleo|weact|qemu> test=<name> [abi=sf|hf]
 #   ./build-and-run.sh <board> <name>                  # positional form
 #
 # Options
@@ -11,6 +11,8 @@
 #                                       LED = PA5, no SPI)
 #            weact   -> WEACT-F411CE  (CMSIS-DAP probe, HSE 25 MHz -> 100 MHz,
 #                                       LED = PC13, USART1 + SPI1)
+#            qemu    -> QEMU emulated STM32F411RE (qemu-system-arm, no board
+#                       needed; firmware runs under -machine netduinoplus2)
 #                     Only board boot/init differs; everything else is shared.
 #   test=    which firmware app to build + flash + run (names below).
 #   abi=     sf|hf float ABI for the hosted dynamic-newlib apps (default sf).
@@ -51,7 +53,7 @@ done
 # Map positionals:  [board] test   (board defaults to weact, so a bare test
 # works: ./build-and-run.sh static/spi-flash  ==  board=weact test=...).
 if [[ ${#POS[@]} -ge 1 ]]; then
-    if [[ "${POS[0]}" == "nucleo" || "${POS[0]}" == "weact" ]]; then
+    if [[ "${POS[0]}" == "nucleo" || "${POS[0]}" == "weact" || "${POS[0]}" == "qemu" ]]; then
         [[ -z "$BOARD" ]] && BOARD="${POS[0]}"
         if [[ ${#POS[@]} -ge 2 && -z "$TEST" ]]; then TEST="${POS[1]}"; fi
     else
@@ -66,18 +68,19 @@ if [[ -n "$HELP" || -z "$TEST" ]]; then
     echo "Example:"
     echo "  ./build-and-run.sh board=weact  test=dyn2"
     echo "  ./build-and-run.sh board=nucleo test=newlib2-sf abi=sf"
+    echo "  ./build-and-run.sh board=qemu   test=dyn1"
     echo "  ./build-and-run.sh static/spi-flash          # board defaults to weact"
     exit 1
 fi
 
-case "$BOARD" in nucleo|weact) ;; *) echo "board must be nucleo or weact (got '$BOARD')" >&2; exit 1 ;; esac
+case "$BOARD" in nucleo|weact|qemu) ;; *) echo "board must be nucleo, weact or qemu (got '$BOARD')" >&2; exit 1 ;; esac
 export SCL_BOARD="$BOARD"
 
-# SPI apps are WEACT-only (the NUCLEO-F411RE has no SPI wiring).
+# SPI apps are WEACT-only (the NUCLEO-F411RE has no SPI wiring; QEMU has no SPI model).
 SPI_TESTS="flatfs-spi flatfs-bitbang-spi drv classic-spi xip-static/spi-flash static/spi-flash"
-if [[ "$BOARD" == "nucleo" ]]; then
+if [[ "$BOARD" == "nucleo" || "$BOARD" == "qemu" ]]; then
     for t in $SPI_TESTS; do
-        [[ "$TEST" == "$t" ]] && { echo "error: '$TEST' needs SPI hardware — only the WEACT board has it (board=nucleo)" >&2; exit 1; }
+        [[ "$TEST" == "$t" ]] && { echo "error: '$TEST' needs SPI hardware — only the WEACT board has it (board=$BOARD)" >&2; exit 1; }
     done
 fi
 
