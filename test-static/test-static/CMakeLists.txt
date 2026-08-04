@@ -33,7 +33,7 @@ set(APP_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(SCL_PLATFORM "board" CACHE STRING "Target platform (board for nucleo/weact, or qemu-f411re for QEMU)")
 if(SCL_PLATFORM STREQUAL "qemu-f411re")
     set(SCL_BOARD "qemu")
-    set(BOARD_DEFS "")
+    set(BOARD_DEFS SCL_BOARD_QEMU=1)
     set(HSE_VAL 16000000)
 else()
     set(SCL_BOARD "weact" CACHE STRING "Target board (nucleo or weact)")
@@ -82,8 +82,11 @@ add_shlib(sh1 libsh1 mylib1)
 add_shlib(sh2 libsh2 mylib2)
 
 # ── Firmware application (loader comes from scl::static) ──────────────────────
+# Under QEMU (SCL_PLATFORM=qemu-f411re) use the QEMU clock init (no HSE/PLL
+# ready-bit polling — the emulator never sets them); on hardware use the real one.
 set(C_SRCS
-    src/initialize-hardware.c
+    $<$<STREQUAL:${SCL_PLATFORM},qemu-f411re>:src/initialize-hardware-qemu.c>
+    $<$<NOT:$<STREQUAL:${SCL_PLATFORM},qemu-f411re>>:src/initialize-hardware.c>
     src/stm32f4xx-hal-msp.c
     src/write.c
     system/src/cmsis/system_stm32f4xx.c
@@ -157,3 +160,16 @@ add_custom_command(TARGET f411ce-sh POST_BUILD
     COMMAND ${CMAKE_OBJDUMP} -DSzw $<TARGET_FILE:f411ce-sh> > $<TARGET_FILE_DIR:f411ce-sh>/f411ce-sh.elf.lst
     COMMAND ${CMAKE_SIZE_UTIL} $<TARGET_FILE:f411ce-sh>
     VERBATIM)
+
+# Run under QEMU with the .so paths delivered via the semihosting command line
+# (argv[1]/argv[2] in main), or flash via OpenOCD on the board.
+if(SCL_PLATFORM STREQUAL "qemu-f411re")
+    enable_testing()
+    add_test(NAME f411ce-sh-qemu
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../test/tools/qemu-run.sh
+                     --machine netduinoplus2
+                     --arg f411ce-sh --arg libsh1/libsh1.so --arg libsh2/libsh2.so
+                     --done "Second 1"
+                     $<TARGET_FILE:f411ce-sh>
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+endif()

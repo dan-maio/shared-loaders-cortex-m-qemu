@@ -9,6 +9,11 @@ BUILD="$HERE/build"
 
 echo "=== configure ==="
 SCL_BOARD="${SCL_BOARD:-weact}"
+case "$SCL_BOARD" in
+  nucleo|weact) ;;
+  qemu)  echo "error: drv is a WEACT-only SPI test — not available under QEMU" >&2; exit 1 ;;
+  *) echo "SCL_BOARD must be nucleo or weact (got '$SCL_BOARD')" >&2; exit 1 ;;
+esac
 cmake -S "$HERE" -B "$BUILD" -DCMAKE_TOOLCHAIN_FILE="$HERE/cmake/arm-none-eabi.cmake" -DSCL_BOARD="$SCL_BOARD"
 
 echo "=== build firmware + fixtures ==="
