@@ -153,7 +153,7 @@ add_dependencies(scl-fw-classic-reloc reloc-fixtures)
 target_compile_definitions(scl-fw-classic-reloc PRIVATE RELOC_LIB_DIR="${RELOC_FIX}/build")
 
 add_dependencies(scl-fw-reloc-interrupt reloc-fixtures)
-target_compile_definitions(scl-fw-reloc-interrupt PRIVATE RELOC_LIB_DIR="${RELOC_FIX}/build")
+target_compile_definitions(scl-fw-reloc-interrupt PRIVATE RELOC_LIB_DIR="${RELOC_FIX}/build" FIRMWARE_ELF_PATH="$<TARGET_FILE:scl-fw-reloc-interrupt>")
 
 # ---- classic-spi: classic test loading modules from SPI flash (W25Q64) -------
 # SPI-flash app: WEACT-only (the NUCLEO-F411RE has no SPI wiring).
