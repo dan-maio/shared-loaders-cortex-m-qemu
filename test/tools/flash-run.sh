@@ -174,6 +174,9 @@ if [[ "$1" == *flatfs* ]]; then
   CMDLINE_ARGS=(-c "arm semihosting_cmdline -c c1.so c2.so cpp3.so libcppeh.so ehx_catch.so notelf.bin")
 fi
 
+# Kill any stale OpenOCD from a previous run (holds the debug probe locked).
+killall openocd 2>/dev/null || true
+
 # Build the OpenOCD command line.
 OPENOCD_CMD=(
   "$OPENOCD" -s "$OPENOCD_SCRIPTS"
