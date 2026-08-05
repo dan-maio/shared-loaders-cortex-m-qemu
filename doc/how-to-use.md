@@ -352,7 +352,7 @@ test/tools/flash-run.sh --timeout 30000 --log /tmp/run.log scl-fw-dyn1
 **Stopping a stuck process**: if OpenOCD does not respond to Ctrl-C:
 
 ```bash
-killall openocd
+killall -s 9 openocd
 ```
 
 ### QEMU

@@ -20,7 +20,7 @@ make
 
 echo "=== Checking for running OpenOCD ==="
 # Kill any existing openocd instance to prevent port conflicts
-killall openocd 2>/dev/null || true
+killall -s 9 openocd 2>/dev/null || true
 
 echo "=== Running with OpenOCD Only ==="
 $OPENOCD -f "$CFG" \

@@ -28,7 +28,7 @@ case "$SCL_BOARD" in
   *) echo "SCL_BOARD must be nucleo or weact (got '$SCL_BOARD')" >&2; exit 1 ;;
 esac
 RUN_MS="${RUN_MS:-1200000}"  # 20 minutes (provisioning + SPI + tests)
-killall openocd 2>/dev/null || true
+killall -s 9 openocd 2>/dev/null || true
 "$OPENOCD" -s "$OPENOCD_SCRIPTS" -f "$CFG" \
     -c "init" \
     -c "reset halt" \

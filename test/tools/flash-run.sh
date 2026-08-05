@@ -175,7 +175,7 @@ if [[ "$1" == *flatfs* ]]; then
 fi
 
 # Kill any stale OpenOCD from a previous run (holds the debug probe locked).
-killall openocd 2>/dev/null || true
+killall -s 9 openocd 2>/dev/null || true
 
 # Build the OpenOCD command line.
 OPENOCD_CMD=(

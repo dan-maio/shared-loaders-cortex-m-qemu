@@ -134,6 +134,6 @@ else
     [[ -n "$HEX" && -f "$HEX" ]] || { echo "error: $APP.hex not built" >&2; exit 1; }
 
     echo "=== flash + run $APP (semihosting console -> $LOG) ==="
-    killall openocd 2>/dev/null || true
+    killall -s 9 openocd 2>/dev/null || true
     exec "$ROOT/test/tools/flash-run.sh" --timeout "$RUN_MS" --log "$LOG" "$HEX"
 fi

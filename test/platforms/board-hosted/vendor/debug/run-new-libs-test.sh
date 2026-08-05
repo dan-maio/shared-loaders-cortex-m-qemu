@@ -41,7 +41,7 @@ if [ "$VARIANT" = "no_dyn" ]; then
     CMDLINE="-c arm semihosting_cmdline f411ce-no_dyn /tmp/c_test1.so /tmp/c_test2.so /tmp/cpp_test1.so /tmp/cpp_test2.so"
 fi
 
-killall -q openocd 2>/dev/null || true; sleep 1
+killall -s 9 -q openocd 2>/dev/null || true; sleep 1
 openocd -s "$SCRIPTS" -f "$CFG" \
     -c "init" \
     -c "reset halt" \

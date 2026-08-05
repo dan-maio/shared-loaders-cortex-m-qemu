@@ -4,7 +4,7 @@ export PATH="/home/dan/.local/xPacks/@xpack-dev-tools/openocd/0.12.0-7.1/.conten
 SCRIPTS="/home/dan/.local/xPacks/@xpack-dev-tools/openocd/0.12.0-7.1/.content/openocd/scripts"
 CFG="$(cd "$SCRIPT_DIR/../../../board" && pwd)/openocd-${SCL_BOARD:-weact}.cfg"
 
-killall -q openocd 2>/dev/null; sleep 1
+killall -s 9 -q openocd 2>/dev/null; sleep 1
 exec openocd -s "$SCRIPTS" -f "$CFG" \
     -c "init" \
     -c "reset halt" \

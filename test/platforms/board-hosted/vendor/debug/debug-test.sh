@@ -12,7 +12,7 @@ if [ ! -f "$TEST_BIN" ]; then
 fi
 
 cd "$PROJECTS"
-killall -q openocd 2>/dev/null || true; sleep 1
+killall -s 9 -q openocd 2>/dev/null || true; sleep 1
 exec openocd -s "$SCRIPTS" -f "$CFG" \
     -c "init" \
     -c "reset halt" \
