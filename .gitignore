@@ -1,6 +1,7 @@
 build/
 build_*/
 build-*/
+build-*.log
 test/build-*/
 *.o
 *.map
