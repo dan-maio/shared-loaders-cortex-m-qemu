@@ -56,6 +56,11 @@ run_test "reloc"         ./test-relocatable/build-and-run.sh qemu reloc         
 run_test "classic"       ./test-relocatable/build-and-run.sh qemu classic           || ok=0
 run_test "interrupt"     ./test-relocatable/build-and-run.sh qemu interrupt         || ok=0
 
+# --- Static loader ---
+run_test "static"        ./test-static/build-and-run.sh qemu static                || ok=0
+run_test "static-cpp"    ./test-static/build-and-run.sh qemu static-cpp            || ok=0
+run_test "static-direct" ./test-static/build-and-run.sh qemu static-direct         || ok=0
+
 # --- XIP ---
 run_test "xip-nolib"     ./test-xip/build-and-run.sh qemu dynamic-nolib            || ok=0
 run_test "xip-newlib"    ./test-xip/build-and-run.sh qemu dynamic-newlib           || ok=0
