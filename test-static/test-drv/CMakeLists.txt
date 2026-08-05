@@ -49,7 +49,6 @@ function(add_shlib_cpp name)
 endfunction()
 add_shlib_cpp(cpp_features)
 
-add_executable(scl-fw-drv
 # --- board selection (unified platform; see test/platforms/board/include/board.h) ---
 set(SCL_PLATFORM "board" CACHE STRING "Target platform (board for nucleo/weact, or qemu-f411re for QEMU)")
 if(SCL_PLATFORM STREQUAL "qemu-f411re")
@@ -69,7 +68,7 @@ else()
     endif()
 endif()
 
-
+add_executable(scl-fw-drv
     src/main.cpp
     ${ST}/src/initialize-hardware.c
     ${ST}/system/src/cmsis/system_stm32f4xx.c
