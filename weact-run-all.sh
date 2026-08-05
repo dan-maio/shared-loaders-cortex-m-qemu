@@ -2,28 +2,32 @@
 # weact-run-all.sh — build, flash and run every SCL test family on the WeAct
 # board (WEACT-F411CE via its on-board CMSIS-DAP WCH-Link probe).
 #
-# Usage:  ./weact-run-all.sh          # run everything (weact)
-#         ./weact-run-all.sh --skip <name>...   # skip already-passed tests
+# Usage:  ./weact-run-all.sh [--board <nucleo|weact>] [--skip <name>...]
 #
-# Each family is dispatched through the per-tree build-and-run.sh scripts with
-# board=weact. Each test is launched (with a generous RUN_MS cap so flash-run
-# auto-shuts OpenOCD down) and its semihosting console log is polled for the
-# firmware's completion marker; as soon as the marker appears the test run is
-# torn down and counted PASS. A test that fails is retried once.
+# Each family is dispatched through the per-tree build-and-run.sh scripts.
+# Each test is launched (with a generous RUN_MS cap so flash-run auto-shuts
+# OpenOCD down) and its semihosting console log is polled for the firmware's
+# completion marker; as soon as the marker appears the test run is torn down
+# and counted PASS (marker-kill). A test that fails is retried once.
 # Logs are saved under build-weact-logs/.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
 
+BOARD="weact"
 SKIP_LIST="${SKIP_LIST:-}"
-if [[ "${1:-}" == "--skip" ]]; then
-    shift
-    SKIP_LIST="$*"
-fi
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --board) BOARD="$2"; shift 2 ;;
+        --skip)  shift; SKIP_LIST="$*"; break ;;
+        *) echo "unknown option: $1" >&2; exit 2 ;;
+    esac
+done
+case "$BOARD" in nucleo|weact) ;; *) echo "board must be nucleo or weact (got '$BOARD')" >&2; exit 2 ;; esac
 
 source tools-config.sh
 export PATH="$ARM_TOOLCHAIN_BIN:$PATH"
-export SCL_BOARD=weact
+export SCL_BOARD="$BOARD"
 
 LOGDIR="$HERE/build-weact-logs"
 mkdir -p "$LOGDIR"
