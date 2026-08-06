@@ -587,9 +587,9 @@ void check_ok(int test_n);
 | `test-overlay/test1/src/main-overlay.cpp` | ~50 | same |
 | `test-relocatable/src/main.cpp` | ~50 | same |
 | `test-relocatable/src/classic/main.cpp` | ~50 | same |
-| `test-xip/test-dynamic-newlib/test1/src/main.cpp` | ~30 | same |
-| `test-xip/test-dynamic-nolib/test1/src/main.cpp` | ~30 | same |
-| `test-xip/test-static/src/main.cpp` | ~30 | same |
+| `test-xip/test-xip-dynamic-newlib/test1/src/main.cpp` | ~30 | same |
+| `test-xip/test-xip-dynamic-nolib/test1/src/main.cpp` | ~30 | same |
+| `test-xip/test-xip-static/src/main.cpp` | ~30 | same |
 
 ### 2b. Unify XIP test triplets (5 files × 3 duplicates)
 
@@ -619,7 +619,7 @@ namespace xip_ns = XIP_NS;
 **Build integration in each `CMakeLists.txt`:**
 
 ```cmake
-# test-xip/test-dynamic-newlib/test1/CMakeLists.txt
+# test-xip/test-xip-dynamic-newlib/test1/CMakeLists.txt
 target_compile_definitions(test1-newlib PRIVATE XIP_NS=xip::newlib)
 target_sources(test1-newlib PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../common/src/test_c1_c2_cpp3.cpp
@@ -637,9 +637,9 @@ target_sources(test1-newlib PRIVATE
 
 **Files:**
 ```
-test-xip/test-dynamic-newlib/test1/src/main.cpp  (~245 lines)
-test-xip/test-dynamic-nolib/test1/src/main.cpp   (~245 lines)
-test-xip/test-static/src/main.cpp                (~307 lines)
+test-xip/test-xip-dynamic-newlib/test1/src/main.cpp  (~245 lines)
+test-xip/test-xip-dynamic-nolib/test1/src/main.cpp   (~245 lines)
+test-xip/test-xip-static/src/main.cpp                (~307 lines)
 ```
 
 **Strategy:** The common pattern includes:
@@ -665,7 +665,7 @@ test-xip/test-static/src/main.cpp                (~307 lines)
 **Residual per-loader file (~40 lines each instead of ~245):**
 
 ```cpp
-// test-xip/test-dynamic-newlib/test1/src/main.cpp (reduced)
+// test-xip/test-xip-dynamic-newlib/test1/src/main.cpp (reduced)
 #include "xip/dynamic-newlib/adapter.hpp"
 #include "xip/segment-map.hpp"
 #include "firmware/semihost-file.hpp"

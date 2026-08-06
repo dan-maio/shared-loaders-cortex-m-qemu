@@ -40,7 +40,7 @@ The SCL provides **ten library targets** that implement different answers, plus 
 
 ### 1.2 The Ten Libraries
 
-**Note:** `scl-dynamic-newlib` and `scl-xip-dynamic-newlib` are now built unconditionally when targeting ARM (no longer guarded by `SCL_HOSTED`). The XIP dynamic-newlib test (`scl-fw-xip-newlib1`) also no longer requires `SCL_HOSTED` — see `test-xip/build_and_run.sh newlib1`.
+**Note:** `scl-dynamic-newlib` and `scl-xip-dynamic-newlib` are now built unconditionally when targeting ARM (no longer guarded by `SCL_HOSTED`). The XIP dynamic-newlib test (`scl-fw-xip-newlib1`) also no longer requires `SCL_HOSTED` — see `test-xip/build-and-run.sh dynamic-newlib`.
 
 The six core loaders are augmented by four XIP adapter targets that wrap the base loaders with execute-in-place support:
 
@@ -1155,7 +1155,7 @@ Because the GOT in flash is **read-only** (the PLT reads it PC-relative), the lo
 3. Returns `{target|Thumb-bit, callee_got}`
 4. Swaps r10 to the callee's `got_base` and calls the target
 
-This is identical to the `dl_cross_call` mechanism in `scl::dynamic-nolib`, but the GOT lookup reads from the **flash-resident** GOT copy (at `flash_data_base`) rather than the RAM copy. The `xip_cross_lookup()` function in `xip/nolib/adapter.cpp` handles this distinction.
+This is identical to the `dl_cross_call` mechanism in `scl::dynamic-nolib`, but the GOT lookup reads from the **flash-resident** GOT copy (at `flash_data_base`) rather than the RAM copy. The `xip_cross_lookup()` function in `xip/dynamic-nolib/adapter.cpp` handles this distinction.
 
 **Impact on RAM and flash:**
 
@@ -2771,7 +2771,7 @@ Level 1: repo root (CMakeLists.txt)
 Level 2: test/ (CMakeLists.txt)
   └─► includes ../ (SCL_ROOT) → gets all scl::* targets
   └─► includes cmake/scl-test-app.cmake
-  └─► includes platforms/weact-f411ce (platform library)
+  └─► includes platforms/board (platform library)
   └─► test-dynamic-nolib/test{1,2,3,4}/
   └─► test-overlay/test1/
   └─► test-dynamic-newlib/test{1,2}/
@@ -2817,15 +2817,15 @@ Note: `scl-dynamic-newlib` and `scl-xip-dynamic-newlib` targets themselves no lo
 `SCL_HOSTED` — they build with the regular `arm-none-eabi.cmake` toolchain. The hosted
 toolchain is only needed for the **test apps** that link against newlib startup code.
 
-### 13.3 Platform Library (`../test/platforms/weact-f411ce/`)
+### 13.3 Platform Library (`../test/platforms/board/`)
 
-The **`platform::weact-f411ce`** INTERFACE target (`../test/platforms/weact-f411ce/cmake/platform-library.cmake:1`) provides:
+The **`platform::weact-f411ce`** INTERFACE target (`../test/platforms/board/cmake/platform-library.cmake:1`) provides:
 
 - **Sources:** `startup.c` (reset vector, .data copy, .bss zero, FPU enable, `main` call), `board.c` (clock init, SysTick), `semihost.c`/`semihost-file.cpp` (ARM semihosting calls), `libc-shim.c` (memcpy/memset/strcmp for `-nostdlib`), `crt.cpp` (operator new/delete), `printf-shim.c`, `dl-semihost.cpp`, `scl-log-semihost.cpp`
 - **Link recipe:** `-pie -nostdlib -nostartfiles -Wl,-Bsymbolic --unresolved-symbols=ignore-all -Wl,-E --gc-sections -L<ldscripts>`
 - **Linker scripts:** `sections.ld` (main), `sections-overlay.ld` (with `OVERLAY` block), `sections-flatfs.ld` (extended flash sectors), `mem.ld` (FLASH@0x08000000/512K, RAM@0x20000000/128K, ARENA@0x20010000/28K), `mem-overlay.ld` (adds OVL window @0x20018000/16K)
 
-The hosted platform lives at `../test/platforms/weact-f411ce-hosted/vendor/` (vendored CMSIS, HAL, newlib, plus its own `mem-sh.ld`/`sections-dyn.ld`/`libs-sh.ld`).
+The hosted platform lives at `../test/platforms/board-hosted/vendor/` (vendored CMSIS, HAL, newlib, plus its own `mem-sh.ld`/`sections-dyn.ld`/`libs-sh.ld`).
 
 ### 13.4 Test App Helper (`../test/cmake/scl-test-app.cmake:1`)
 
@@ -2888,7 +2888,7 @@ cmake -S test-dynamic/test-dynamic-newlib -B test/build-dynamic-newlib-hf \
 cmake --build test/build-dynamic-newlib-hf -j
 ```
 
-The hosted platform (`weact-f411ce-hosted`) is vendored under `../test/platforms/weact-f411ce-hosted/vendor/` and provides its own `mem-sh.ld`, `libs-sh.ld`, `sections-dyn.ld` linker scripts (with the `_reloc` table), plus HAL/CMSIS/newlib startup.
+The hosted platform (`weact-f411ce-hosted`) is vendored under `../test/platforms/board-hosted/vendor/` and provides its own `mem-sh.ld`, `libs-sh.ld`, `sections-dyn.ld` linker scripts (with the `_reloc` table), plus HAL/CMSIS/newlib startup.
 
 #### ET_REL App (scl::reloc)
 
@@ -2977,7 +2977,7 @@ Key differences from the C version:
 - Compiled with `-fno-exceptions -fno-rtti` (no unwind tables, no typeinfo)
 - The fixture is passed as a **link-time input** to the firmware (`target_link_libraries(... libcpp_features.so)`) so the linker creates PLT/GOT entries for direct calls like `cpp_features_run()`
 
-#### Hosted Fixtures (`../test/platforms/weact-f411ce-hosted/vendor/libs/`)
+#### Hosted Fixtures (`../test/platforms/board-hosted/vendor/libs/`)
 
 - Built **automatically** by CMake fixture targets during `cmake --build test/build-dynamic-newlib[-hf]`
 - Sources in `vendor/libs/{c,cpp}/`, `vendor/debug/test_libs/`, `vendor/debug/test_hardfp/`
@@ -3246,7 +3246,7 @@ All 29 CMakeLists.txt files, organised hierarchically from repository root to le
 ##### `test-relocatable/CMakeLists.txt`
 **Path:** `../test-relocatable/CMakeLists.txt`
 **Targets:** `scl-fw-reloc`, `scl-fw-classic-reloc`
-**Role:** Self-contained non-PIC firmware for ET_REL module loader. Reuses platform *sources* from `../test/platforms/weact-f411ce/` but its **own** linker script `platform/reloc.ld`. Links `scl::reloc`. Compiles `-fno-pic -fno-pie` (no GOT/PLT). Builds ET_REL fixtures via `make -C fixtures-reloc/`. Embeds flat-fs blobs via `embed-blob.py` and `pack-flatfs.py`.
+**Role:** Self-contained non-PIC firmware for ET_REL module loader. Reuses platform *sources* from `../test/platforms/board/` but its **own** linker script `platform/reloc.ld`. Links `scl::reloc`. Compiles `-fno-pic -fno-pie` (no GOT/PLT). Builds ET_REL fixtures via `make -C fixtures-reloc/`. Embeds flat-fs blobs via `embed-blob.py` and `pack-flatfs.py`.
 **Options:**
 
 | Option | Description |
@@ -3269,26 +3269,26 @@ All 29 CMakeLists.txt files, organised hierarchically from repository root to le
 | `-DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake` | **required** (freestanding ARM) |
 
 
-##### `test-xip/test-dynamic-nolib/CMakeLists.txt`
-**Path:** `../test-xip/test-dynamic-nolib/CMakeLists.txt`
+##### `test-xip/test-xip-dynamic-nolib/CMakeLists.txt`
+**Path:** `../test-xip/test-xip-dynamic-nolib/CMakeLists.txt`
 **Role:** Single-line: adds `test1/` subdirectory. No options.
 
-##### `test-xip/test-dynamic-nolib/test1/CMakeLists.txt`
-**Path:** `../test-xip/test-dynamic-nolib/test1/CMakeLists.txt`
+##### `test-xip/test-xip-dynamic-nolib/test1/CMakeLists.txt`
+**Path:** `../test-xip/test-xip-dynamic-nolib/test1/CMakeLists.txt`
 **Target:** `scl-fw-xip-nolib1`
 **Role:** XIP dynamic-nolib battery — loads all 10 fixtures from flash (R-X in flash, RW in RAM), full surface exercise. Links `scl::xip-dynamic-nolib`. `-pie`, `-nostartfiles`, `-Bsymbolic`, `-E`. Copies PIC `.so` fixtures for semihosting.
 
-##### `test-xip/test-dynamic-newlib/CMakeLists.txt`
-**Path:** `../test-xip/test-dynamic-newlib/CMakeLists.txt`
+##### `test-xip/test-xip-dynamic-newlib/CMakeLists.txt`
+**Path:** `../test-xip/test-xip-dynamic-newlib/CMakeLists.txt`
 **Role:** Single-line: adds `test1/` subdirectory. No options.
 
-##### `test-xip/test-dynamic-newlib/test1/CMakeLists.txt`
-**Path:** `../test-xip/test-dynamic-newlib/test1/CMakeLists.txt`
+##### `test-xip/test-xip-dynamic-newlib/test1/CMakeLists.txt`
+**Path:** `../test-xip/test-xip-dynamic-newlib/test1/CMakeLists.txt`
 **Target:** `scl-fw-xip-newlib1`
 **Role:** XIP dynamic-newlib battery. Links `scl::xip-dynamic-newlib`. Same PIC/XIP flags as nolib variant.
 
-##### `test-xip/test-static/CMakeLists.txt`
-**Path:** `../test-xip/test-static/CMakeLists.txt`
+##### `test-xip/test-xip-static/CMakeLists.txt`
+**Path:** `../test-xip/test-xip-static/CMakeLists.txt`
 **Target:** `scl-fw-xip-static`
 **Role:** XIP static loader test — basic load and call from flash. Links `scl::xip-common`. Compiles `pic-trampoline.c`, `image-memory.cpp`, `link-context.cpp`, `unwind-find-exidx.c` directly.
 
@@ -3320,10 +3320,10 @@ All 29 CMakeLists.txt files, organised hierarchically from repository root to le
 | 21 | test/ | `../test-static/test-static/CMakeLists.txt` | `CMAKE_TOOLCHAIN_FILE` | Static patcher demo (own ldscripts) |
 | 22 | test-relocatable/ | `../test-relocatable/CMakeLists.txt` | `CMAKE_TOOLCHAIN_FILE`, `RELOC_LIB_DIR` | ET_REL firmware (non-PIC, scl::reloc) |
 | 23 | test-xip/ | `../test-xip/CMakeLists.txt` | `CMAKE_TOOLCHAIN_FILE` | XIP firmware aggregator |
-| 25 | test-xip/ | `../test-xip/test-dynamic-nolib/CMakeLists.txt` | (none) | Adds XIP nolib test1 subdir |
-| 26 | test-xip/ | `../test-xip/test-dynamic-nolib/test1/CMakeLists.txt` | `CMAKE_TOOLCHAIN_FILE` | XIP dynamic-nolib battery |
-| 27 | test-xip/ | `../test-xip/test-dynamic-newlib/CMakeLists.txt` | (none) | Adds XIP newlib test1 subdir |
-| 29 | test-xip/ | `../test-xip/test-static/CMakeLists.txt` | `CMAKE_TOOLCHAIN_FILE` | XIP static loader test |
+| 25 | test-xip/ | `../test-xip/test-xip-dynamic-nolib/CMakeLists.txt` | (none) | Adds XIP nolib test1 subdir |
+| 26 | test-xip/ | `../test-xip/test-xip-dynamic-nolib/test1/CMakeLists.txt` | `CMAKE_TOOLCHAIN_FILE` | XIP dynamic-nolib battery |
+| 27 | test-xip/ | `../test-xip/test-xip-dynamic-newlib/CMakeLists.txt` | (none) | Adds XIP newlib test1 subdir |
+| 29 | test-xip/ | `../test-xip/test-xip-static/CMakeLists.txt` | `CMAKE_TOOLCHAIN_FILE` | XIP static loader test |
 
 
 ## 14. Advanced Interrupt Handling and Context Switching

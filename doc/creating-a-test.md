@@ -259,7 +259,7 @@ Getting this wrong surfaces as a HardFault inside the module, not a link error.
    through `test/`, never by walking up into another tree:
    ```cmake
    get_filename_component(_repo ${CMAKE_CURRENT_SOURCE_DIR}/../.. ABSOLUTE)
-   set(_su ${_repo}/test/platforms/weact-f411ce-hosted/vendor)
+   set(_su ${_repo}/test/platforms/board-hosted/vendor)
    include(${_repo}/test/cmake/scl-test-app.cmake)
    ```
    Pass linker scripts as `-T${DIR}/script.ld` — one argument, no space. The

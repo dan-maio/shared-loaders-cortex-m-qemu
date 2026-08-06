@@ -256,8 +256,8 @@ refactoring.
 
 ```bash
 cd ~/TMP3/scaffold/shared-loaders
-./test/build-and-run.sh flatfs-bitbang-spi
-./test/build-and-run.sh flatfs-spi
+./test-dynamic/build-and-run.sh flatfs-bitbang-spi
+./test-dynamic/build-and-run.sh flatfs-spi
 ```
 
 Both tests provision 8 `.so` files to the W25Q64, then run the 15-test
@@ -269,7 +269,7 @@ cross-module battery through `dlopen_fs`.
 
 | Path | Role |
 |------|------|
-| `test/platforms/weact-f411ce/src/board.c` | Board init: PLL, GPIO, SysTick |
+| `test/platforms/board/src/board.c` | Board init: PLL, GPIO, SysTick |
 | `test-dynamic/test-flatfs-bitbang-spi/src/spi-flash.cpp` | Bitbang SPI driver |
 | `test-dynamic/test-flatfs-spi/src/w25q64.cpp` | HAL SPI driver + W25Q64 commands |
 | `test-dynamic/test-flatfs-spi/include/spi-flash.h` | C API declarations (extern "C") |

@@ -665,7 +665,7 @@ its own `main.cpp`:
 | `scl-fw-classic-reloc` | `test-relocatable/src/classic/main.cpp` | **classic demo** — `log_info`, no PASS/FAIL (§9–§10) |
 
 Paths below are relative to the repo root (`shared-lib-loaders/`); the shared
-platform layer lives under `PLAT = test/platforms/weact-f411ce`.
+platform layer lives under `PLAT = test/platforms/board`.
 
 ### 11.1. Sources compiled & linked into each firmware
 
@@ -676,11 +676,11 @@ only in their `main.cpp` and (for the classic app) three generated flatfs source
 
 | File | Path | Role |
 | --- | --- | --- |
-| `startup.c` | `test/platforms/weact-f411ce/src/startup.c` | vectors + reset (copy `.data`, zero `.bss`, FPU, call `main`) |
-| `semihost.c` | `test/platforms/weact-f411ce/src/semihost.c` | `trace_puts/putc` + `semihost_open/flen/read/close` |
-| `board.c` | `test/platforms/weact-f411ce/src/board.c` | `board_init` / SysTick |
-| `crt.cpp` | `test/platforms/weact-f411ce/src/crt.cpp` | `operator new/delete` + `malloc/free` (static heap) |
-| `libc-shim.c` | `test/platforms/weact-f411ce/src/libc-shim.c` | `memcpy/memset/…` (freestanding, `-nostdlib`) |
+| `startup.c` | `test/platforms/board/src/startup.c` | vectors + reset (copy `.data`, zero `.bss`, FPU, call `main`) |
+| `semihost.c` | `test/platforms/board/src/semihost.c` | `trace_puts/putc` + `semihost_open/flen/read/close` |
+| `board.c` | `test/platforms/board/src/board.c` | `board_init` / SysTick |
+| `crt.cpp` | `test/platforms/board/src/crt.cpp` | `operator new/delete` + `malloc/free` (static heap) |
+| `libc-shim.c` | `test/platforms/board/src/libc-shim.c` | `memcpy/memset/…` (freestanding, `-nostdlib`) |
 
 **Shared by both — the `scl::reloc` loader library** (`target_link_libraries(… scl::reloc)`, compiled from source into each image):
 
@@ -720,8 +720,8 @@ Both `main.cpp` files include the identical set:
 
 | Include | Resolved path | Provided via |
 | --- | --- | --- |
-| `"board.h"` | `test/platforms/weact-f411ce/include/board.h` | `target_include_directories(… PLAT/include)` |
-| `"semihost.h"` | `test/platforms/weact-f411ce/include/semihost.h` | `PLAT/include` |
+| `"board.h"` | `test/platforms/board/include/board.h` | `target_include_directories(… PLAT/include)` |
+| `"semihost.h"` | `test/platforms/board/include/semihost.h` | `PLAT/include` |
 | `"reloc/reloc-loader.hpp"` | `include/reloc/reloc-loader.hpp` | `scl::reloc` INTERFACE includes |
 | `<cstddef> <cstdint> <span> <string_view>` | arm-none-eabi libstdc++ | toolchain headers |
 

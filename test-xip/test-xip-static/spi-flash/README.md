@@ -50,7 +50,7 @@ cmake -S test-xip -B test-xip/build -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.c
 cmake --build test-xip/build --target scl-fw-xip-static-spi-flash -j
 
 # Flash and run
-./test-xip/build-and-run.sh static2
+./test-xip/build-and-run.sh static/spi-flash
 ```
 
 ## Constraints

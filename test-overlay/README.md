@@ -11,5 +11,5 @@ Linker overlays allow mapping multiple code sections (e.g. separate modules) to 
 ## How (Execution)
 Compile, flash, and run the overlay test via:
 ```bash
-./test/build_and_run.sh ovl1
+./test/build-and-run.sh ovl1
 ```

@@ -1011,7 +1011,7 @@ Used by `symbol_resolver` for O(1) lookup in `.hash` table.
 Semihosting allows the Cortex-M target to access host PC files through the debug interface (CMSIS-DAP/JTAG).
 
 ```cpp
-// test/platforms/weact-f411ce/src/semihost-file.cpp
+// test/platforms/board/src/semihost-file.cpp
 class semihost_file final : public loader::byte_source {
     int handle_;
     std::size_t size_;

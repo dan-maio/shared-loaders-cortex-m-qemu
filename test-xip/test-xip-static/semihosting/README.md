@@ -1,4 +1,4 @@
-# test-xip/test-static — XIP with the *static* loader model
+# test-xip/test-xip-static — XIP with the *static* loader model
 
 Mirrors `test-dynamic-nolib/test1` (full-surface, print-only, R-X from flash),
 but with **no dynamic loader** — there is no `dlopen`/`dlsym` and no call-time
@@ -18,7 +18,7 @@ and **function imports** from main (`host_f`, `printf`).
 ## How it runs
 
 ```
-test-xip/test-static/build_and_run.sh      # build fixture + firmware, flash, capture console
+test-xip/test-xip-static/build-and-run.sh      # build fixture + firmware, flash, capture console
 ```
 
 ## How the static model differs from the nolib (dynamic) one

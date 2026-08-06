@@ -203,9 +203,9 @@ All test firmware images are built with `cmake -DCMAKE_TOOLCHAIN_FILE=cmake/arm-
 
 | Target | Loader | Storage | Driver | Run |
 |--------|--------|---------|--------|-----|
-| `scl-fw-flatfs` | `scl::dynamic-nolib` | Main flash (memory-mapped) | — | `./test/build-and-run.sh flatfs` |
-| `scl-fw-flatfs-bitbang-spi` | `scl::dynamic-nolib` | W25Q64 SPI flash | Bitbang GPIO | `./test/build-and-run.sh flatfs-bitbang-spi` |
-| `scl-fw-flatfs-spi` | `scl::dynamic-nolib` | W25Q64 SPI flash | STM32F4 HAL SPI | `./test/build-and-run.sh flatfs-spi` |
+| `scl-fw-flatfs` | `scl::dynamic-nolib` | Main flash (memory-mapped) | — | `./test-dynamic/build-and-run.sh dynamic-nolib/test3` |
+| `scl-fw-flatfs-bitbang-spi` | `scl::dynamic-nolib` | W25Q64 SPI flash | Bitbang GPIO | `./test-dynamic/build-and-run.sh flatfs-bitbang-spi` |
+| `scl-fw-flatfs-spi` | `scl::dynamic-nolib` | W25Q64 SPI flash | STM32F4 HAL SPI | `./test-dynamic/build-and-run.sh flatfs-spi` |
 
 ### 7.2. ET_REL Static Loading Tests (`test-relocatable/`)
 

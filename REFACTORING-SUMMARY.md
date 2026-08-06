@@ -32,8 +32,8 @@ Previously, both `src/dynamic-newlib/dynamic-linker.cpp` and XIP's `src/xip/dyna
 
 ### 3. Application: `dl-impl.cpp`, `main-no-dyn.cpp` & `main.cpp`
 Defined `scl_lookup_firmware_symbol` on the application side to preserve backwards-compatibility for existing tests. Additionally, default weak testing variables (`AA`, `BB`, `s1`, `f`, `w`, and `hf_pi`) that were previously inside SCL were moved and initialized in the application layer (within `dl-impl.cpp` / `main.cpp` / `main-no-dyn.cpp` as appropriate) so they resolve correctly during test runs:
-* [dl-impl.cpp](file:///home/dan/Documents/shared-loaders-weact_agy/test/platforms/weact-f411ce-hosted/vendor/firmware/src/dl-impl.cpp) (test-dynamic firmware app facade)
-* [main-no-dyn.cpp](file:///home/dan/Documents/shared-loaders-weact_agy/test/platforms/weact-f411ce-hosted/vendor/firmware/src/main-no-dyn.cpp) (no-dyn/static test app facade)
+* [dl-impl.cpp](file:///home/dan/Documents/shared-loaders-weact_agy/test/platforms/board-hosted/vendor/firmware/src/dl-impl.cpp) (test-dynamic firmware app facade)
+* [main-no-dyn.cpp](file:///home/dan/Documents/shared-loaders-weact_agy/test/platforms/board-hosted/vendor/firmware/src/main-no-dyn.cpp) (no-dyn/static test app facade)
 * [main.cpp](file:///home/dan/Documents/shared-loaders-weact_agy/test-xip/test-xip-dynamic-newlib/test1/src/main.cpp) (XIP newlib test app)
 
 Additionally, `LINKER:-E` was enabled in `CMakeLists.txt` for the dynamic-newlib test targets so the linker correctly builds a `.dynsym` table in the executable when compiling for dynamic execution.

@@ -26,13 +26,13 @@ variable and automate the compile-flash-run cycle.
 
 ---
 
-## 1. Dynamic Loaders (`test/build_and_run.sh`)
+## 1. Dynamic Loaders (`test-dynamic/build-and-run.sh`)
 
 Orchestrates all standard dynamic shared-library (`.so`) loader tests.
 
 ### Usage
 ```bash
-./test/build_and_run.sh <variant-target>
+./test-dynamic/build-and-run.sh <target>
 ```
 
 ### Available Target Options
@@ -51,13 +51,13 @@ Orchestrates all standard dynamic shared-library (`.so`) loader tests.
 
 ---
 
-## 2. Relocatable Loader (`test-relocatable/build_and_run.sh`)
+## 2. Relocatable Loader (`test-relocatable/build-and-run.sh`)
 
 Orchestrates relocatable object (`.rel.o`) loader tests.
 
 ### Usage
 ```bash
-./test-relocatable/build_and_run.sh <variant-target>
+./test-relocatable/build-and-run.sh <variant-target>
 ```
 
 ### Available Target Options
@@ -70,13 +70,13 @@ Orchestrates relocatable object (`.rel.o`) loader tests.
 
 ---
 
-## 3. Execute In Place (XIP) Loaders (`test-xip/build_and_run.sh`)
+## 3. Execute In Place (XIP) Loaders (`test-xip/build-and-run.sh`)
 
 Orchestrates execute-in-place loader tests (where text segments execute directly from Flash while data resides in RAM).
 
 ### Usage
 ```bash
-./test-xip/build_and_run.sh <variant-target>
+./test-xip/build-and-run.sh <variant-target>
 ```
 
 ### Available Target Options
@@ -100,7 +100,7 @@ For `static2`, you must first build XIP-compatible fixtures:
 ./test-xip/test-xip-static/spi-flash/fixtures-src/build-xip-drv.sh
 
 # Then build and run
-./test-xip/build-and-run.sh static2
+./test-xip/build-and-run.sh static/spi-flash
 ```
 
 ### XIP Build Constraints
@@ -116,7 +116,7 @@ Without these flags, modules load in **copy-whole mode** (everything in RAM).
 
 ## 4. Full Build-to-Flash Pipeline (Step by Step)
 
-Every `build_and_run.sh` script follows the same end-to-end path from source code to running firmware. The pipeline differs between hardware (OpenOCD) and QEMU targets:
+Every `build-and-run.sh` script follows the same end-to-end path from source code to running firmware. The pipeline differs between hardware (OpenOCD) and QEMU targets:
 
 ### Stage 1 — Environment Setup (`tools-config.sh`)
 
@@ -182,7 +182,7 @@ The firmware loads shared libraries from hardcoded `/tmp/*.so` paths via semihos
 
 ### Stage 5 — Run Backend (Hardware vs QEMU)
 
-The `build_and_run.sh` script branches based on the selected board:
+The `build-and-run.sh` script branches based on the selected board:
 
 **Hardware (nucleo/weact)** — delegates to `flash-run.sh`:
 

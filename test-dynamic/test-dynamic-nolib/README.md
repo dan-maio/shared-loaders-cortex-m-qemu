@@ -14,5 +14,5 @@ These tests validate runtime loading and execution of position-independent share
 ## How (Execution)
 Run any of the tests using the primary workspace script:
 ```bash
-./test/build_and_run.sh [dyn1|dyn2|flatfs|gotplt-demo]
+./test/build-and-run.sh [dyn1|dyn2|flatfs|gotplt-demo]
 ```

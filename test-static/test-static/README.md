@@ -11,5 +11,5 @@ Unlike dynamic loading which resolves symbols and offsets on-demand at runtime, 
 ## How (Execution)
 Compile and run the static patcher tests via:
 ```bash
-./test/build_and_run.sh static
+./test/build-and-run.sh static
 ```

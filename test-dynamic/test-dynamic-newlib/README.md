@@ -12,5 +12,5 @@ Hosted loading enables standard C/C++ libraries (like `std::vector`, heap storag
 ## How (Execution)
 Run these tests using either the soft-float (`sf`) or hard-float (`hf`) wrapper variants:
 ```bash
-./test/build_and_run.sh [newlib1-sf|newlib2-sf|newlib1-hf|newlib2-hf]
+./test/build-and-run.sh [newlib1-sf|newlib2-sf|newlib1-hf|newlib2-hf]
 ```

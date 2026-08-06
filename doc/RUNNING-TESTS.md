@@ -289,7 +289,7 @@ into a sibling tree:
 
 ```cmake
 get_filename_component(_repo ${CMAKE_CURRENT_SOURCE_DIR}/../.. ABSOLUTE)   # adjust depth
-set(_su ${_repo}/test/platforms/weact-f411ce-hosted/vendor)
+set(_su ${_repo}/test/platforms/board-hosted/vendor)
 include(${_repo}/test/cmake/scl-test-app.cmake)
 ```
 

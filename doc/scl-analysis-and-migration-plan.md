@@ -15,7 +15,7 @@ Zig ports) and the phased plan for extracting a reusable **Source Code library
 > remains as the original analysis + plan record.
 >
 > Post-plan dedup (same day): single-copy ownership established — test-app
-> mains and the board platform exist once each (`test/platforms/weact-f411ce`
+> mains and the board platform exist once each (`test/platforms/board`
 > + reference-app-owned mains, referenced in place everywhere); the duplicate
 > Makefile firmware builds were removed after two stale-binary hardware faults.
 

@@ -185,7 +185,7 @@ needed:
 | `scl-fw-xip-*` | `test-xip/test-xip-*/src/` | `weact-f411ce-hosted` |
 | `scl-fw-xip-static-spi-flash` | `test-xip/test-xip-static/spi-flash/src/` | `weact-f411ce-hosted` |
 
-The freestanding board platform (`test/platforms/weact-f411ce/`) owns
+The freestanding board platform (`test/platforms/board/`) owns
 startup/board/semihosting/libc-shim/crt/printf-shim/`dl_semihost`/`scl_log`
 bridge and all freestanding linker scripts. The hosted platform
 (`weact-f411ce-hosted/vendor/`) vendors the CMSIS/HAL/newlib environment, the
@@ -311,7 +311,7 @@ newlib heap — a hosted CMSIS/HAL environment). API in
   against the firmware then use the same SysV-hash `symbol_resolver` as
   everything else. The linker scripts that produce this table (and keep
   `.dynsym`/`.rel.dyn` in the image) are vendored under
-`test/platforms/weact-f411ce-hosted/vendor/common/ldscripts/{mem-sh,libs-sh}.ld`
+`test/platforms/board-hosted/vendor/common/ldscripts/{mem-sh,libs-sh}.ld`
    + `.../firmware/ldscripts/sections-dyn.ld`, used by the
    `weact-f411ce-hosted` test platform.
 * Unresolved imports fall back to a **known-symbol table** inside
@@ -437,7 +437,7 @@ export PATH=/home/dan/.local/xPacks/@xpack-dev-tools/arm-none-eabi-gcc/15.2.1-1.
 
 # 0) optional: full clean
 ./cleaner.sh   # or: rm -rf test-dynamic/build test/build-dynamic-newlib test/build-dynamic-newlib-hf \
-       test/platforms/weact-f411ce-hosted/vendor/libs/build*
+       test/platforms/board-hosted/vendor/libs/build*
 
 # 2) freestanding firmware apps — dyn1, dyn2, flatfs, ovl1
 cmake -S test-dynamic -B test-dynamic/build -DCMAKE_TOOLCHAIN_FILE=$PWD/cmake/arm-none-eabi.cmake
@@ -474,7 +474,7 @@ them):
 | Float ABI | hard-float only (the dynamic port asm uses VFP) | soft by default, `-DSCL_HF=ON` for hard |
 | Toolchain file | `cmake/arm-none-eabi.cmake` | `cmake/arm-none-eabi-hosted.cmake` |
 | Used by | `scl-fw-dyn1/2`, `scl-fw-ovl1`, `scl-fw-flatfs` | `scl-fw-dynamic-newlib1/2` |
-| Where the files live | `test/platforms/weact-f411ce/{src,include,ldscripts}` | vendored under `test/platforms/weact-f411ce-hosted/vendor/` |
+| Where the files live | `test/platforms/board/{src,include,ldscripts}` | vendored under `test/platforms/board-hosted/vendor/` |
 
 Because the two environments need different *global* compiler flags, they
 cannot share one CMake build tree: `test-dynamic/build` holds the freestanding apps, and
@@ -617,7 +617,7 @@ firmware ABI — see §4.0). Expected tail: `ALL OK — blink`.
   scripts). The freestanding apps use the committed `.so`; to regenerate them,
   build the fixture libraries with the toolchain on PATH and copy into
   `test/fixtures/`.
-* Static-app fixtures live under `test/platforms/weact-f411ce-hosted/vendor/`
+* Static-app fixtures live under `test/platforms/board-hosted/vendor/`
   (`libs/`, `debug/test_libs`, `debug/test_hardfp`) and are built automatically
   by the CMake fixture targets into `vendor/libs/build` (soft) / `build_hf`
   (hard).
@@ -710,7 +710,7 @@ The application must provide: board init/startup/clocks, linker scripts
 (arena symbols; `-Wl,-E`/anchors for the dynamic loader; the `_reloc` table for
 the static loader; the OVERLAY block for overlays), a `byte_source`-based
 storage front-end, and (optionally) the `scl_log` hook. Copy the pattern from
-`test/platforms/weact-f411ce/` — it is a complete worked example of every
+`test/platforms/board/` — it is a complete worked example of every
 application responsibility.
 
 ---
@@ -725,7 +725,7 @@ application responsibility.
 | `openocd` + its `scripts/` | `/home/dan/.local/xPacks/@xpack-dev-tools/openocd/0.12.0-7.1/.content/{bin,openocd/scripts}` | `test/tools/flash-run*.sh` | env `OPENOCD=`, `OPENOCD_SCRIPTS=` |
 | host `g++` (C++20) + `cmake` ≥ 3.20 + `ctest` | system | all CMake builds | `CXX=` |
 | `make` | system | invoked *by CMake* to build the static-app fixture `.so` (vendored `libs/`, `debug/test_libs`, `debug/test_hardfp`); needs the toolchain on PATH (its Makefiles call `objdump`) | — |
-| board config | `test/platforms/weact-f411ce/openocd.cfg` (CMSIS-DAP + `connect_assert_srst`) | all on-target runs | edit / `-f` another cfg |
+| board config | `test/platforms/board/openocd.cfg` (CMSIS-DAP + `connect_assert_srst`) | all on-target runs | edit / `-f` another cfg |
 
 ### 7.2 Compile-time constants (#define) — who defines what
 

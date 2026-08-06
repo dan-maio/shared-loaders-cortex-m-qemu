@@ -627,7 +627,7 @@ RAM      0x20000000 128K
 The build is **CMake**, driven by the `cmake/arm-none-eabi.cmake` toolchain file, which
 generates ordinary Unix Makefiles under `test-xip/build/`. There is no hand-maintained
 Makefile any more — the toolchain file notes its flag set matches the legacy Makefile
-firmware build. `test-xip/build_and_run.sh` sequences the whole thing, and the **order
+firmware build. `test-xip/build-and-run.sh` sequences the whole thing, and the **order
 matters**:
 
 1. `build-fixtures.sh` → builds `mylib1/2` (single-pic-base, split) into `test-xip/fixtures`.
@@ -680,7 +680,7 @@ is skipped. See `test-xip/comparison.md`.
   single-pic-base + split by `test-xip/fixtures-src/build-xip-libs.sh` (`build-fixtures.sh`
   builds `mylib1/2`). With that, every fixture reports `loaded (XIP)` with code at
   `0x0804xxxx` and only its RW segment in RAM — hardware-verified (`run.log`). The build
-  ordering matters: `build_and_run.sh` runs `build-xip-libs.sh` *after* the CMake
+  ordering matters: `build-and-run.sh` runs `build-xip-libs.sh` *after* the CMake
   configure, so the single-pic-base rebuilds overwrite the baseline `-fPIC` copies.
 * **Cross-library calls** (`c1→c2`, `cpp3↔c2`) run from flash: their external JUMP_SLOTs
   route through the cross-call trampoline (`fw::dl_enable_cross_call(true)`), so each

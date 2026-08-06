@@ -1144,7 +1144,7 @@ The `src/dynamic-newlib/` loader was originally developed in a separate project 
 went into `src/` and `include/`, the loader class went into `src/dynamic-newlib/`, and
 the test firmware (with its platform-specific `dlopen` front-end) was left as a
 **vendored copy** under the board platform directory
-(`test/platforms/weact-f411ce-hosted/vendor/`). This avoided reworking the
+(`test/platforms/board-hosted/vendor/`). This avoided reworking the
 test infrastructure to use `src/dynamic-nolib/dl.cpp`'s internal API.
 
 The two `dl::` facades serve the same purpose — provide `dlopen`/`dlsym`/`dlclose`
@@ -1382,7 +1382,7 @@ backend and running it against the other will get different results.
 
 ### 3. Eliminate the vendored `vendor/` tree
 
-`test/platforms/weact-f411ce-hosted/vendor/` is a frozen copy of the old
+`test/platforms/board-hosted/vendor/` is a frozen copy of the old
 `static-unify-code` project. It:
 - Duplicates SCL functionality (its own `.so` fixture build recipes,
   `dl-impl.cpp`, test sources).

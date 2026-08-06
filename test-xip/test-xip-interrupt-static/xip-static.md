@@ -1,6 +1,6 @@
 # Static-XIP Loader Architecture & Reference Guide
 
-This document describes the design, compilation options, memory footprint, and runtime behavior of the **Static-XIP Loader** implemented under `test-xip/test-static`.
+This document describes the design, compilation options, memory footprint, and runtime behavior of the **Static-XIP Loader** implemented under `test-xip/test-xip-static`.
 
 ---
 

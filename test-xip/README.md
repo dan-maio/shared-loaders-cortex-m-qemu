@@ -15,23 +15,23 @@ literal, struct member, function-pointer path, weak symbol, cross-library call
 (`c1→c2`, `cpp3↔c2`), C++ RTTI/`dynamic_cast`, virtual objects, and calls back into
 `main` (including `printf`). Every library reports `loaded (XIP)` with code at
 `0x0804xxxx`; only the RW segment lands in RAM. `test-dynamic-newlib` and `test-static`
-are also implemented (see `build_and_run.sh newlib1` / `static`). See `comparison.md`
+are also implemented (see `build-and-run.sh newlib1` / `static`). See `comparison.md`
 for per-library sizes and RAM savings (~15 KB).
 
 ## How it runs
 
 Run the main test script with one of the available target options (`nolib1`, `interrupt`, `newlib1`, `static`, `static-direct`, `interrupt-static`, `interrupt-static-direct`, or `static2`):
 ```bash
-./test-xip/build_and_run.sh <target-variant>
+./test-xip/build-and-run.sh <target-variant>
 ```
 
-`build_and_run.sh` runs `fixtures-src/build-fixtures.sh` (builds `mylib1/2`), configures
+`build-and-run.sh` runs `fixtures-src/build-fixtures.sh` (builds `mylib1/2`), configures
 CMake, then runs `fixtures-src/build-xip-libs.sh` **after** configure so its
 single-pic-base rebuilds of the other eight fixtures overwrite the baseline `-fPIC`
 copies CMake staged; it then builds the hosted firmware, flashes it, and tees the
 semihosting console to `test-xip/build/run.log`. (The fixtures are build output,
 git-ignored.) Give it a longer window for the full surface: `RUN_MS=20000
-test-xip/build_and_run.sh nolib1` — the default 10 s can truncate before the last group.
+test-xip/build-and-run.sh dynamic-nolib` — the default 10 s can truncate before the last group.
 
 ## Key pieces
 

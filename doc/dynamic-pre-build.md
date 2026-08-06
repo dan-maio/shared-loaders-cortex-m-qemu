@@ -90,7 +90,7 @@ The tool compiles automatically on-the-fly and integrates with the build paths:
         ...)
     add_custom_target(gen-symtab-host DEPENDS "${SCL_HOST_GEN_SYMTAB}")
     ```
-*   **Platform Wrapper Integration**: In [`platform-library.cmake`](file:///home/dan/Documents/shared-loaders-weact_agy/test/platforms/weact-f411ce-hosted/cmake/platform-library.cmake), we updated `scl_embed_symtab` to declare dependency on `gen-symtab-host` and run the binary post-build.
+*   **Platform Wrapper Integration**: In [`platform-library.cmake`](file:///home/dan/Documents/shared-loaders-weact_agy/test/platforms/board-hosted/cmake/platform-library.cmake), we updated `scl_embed_symtab` to declare dependency on `gen-symtab-host` and run the binary post-build.
 *   **XIP Target Integration**: Added the same dependency and post-build step in [`CMakeLists.txt`](file:///home/dan/Documents/shared-loaders-weact_agy/test-xip/test-xip-dynamic-newlib/test1/CMakeLists.txt).
 
 ---

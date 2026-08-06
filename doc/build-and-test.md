@@ -267,14 +267,14 @@ cmake --build test-xip/build --target scl-fw-xip-nolib1 -j
 
 Or use the runner script:
 ```sh
-./test-xip/build-and-run.sh nolib1             # freestanding XIP
-./test-xip/build-and-run.sh newlib1            # hosted XIP
-./test-xip/build-and-run.sh static             # static XIP (semihosting)
+./test-xip/build-and-run.sh dynamic-nolib             # freestanding XIP
+./test-xip/build-and-run.sh dynamic-newlib            # hosted XIP
+./test-xip/build-and-run.sh static/semihosting             # static XIP (semihosting)
 ./test-xip/build-and-run.sh static-direct      # direct API calls XIP
 ./test-xip/build-and-run.sh interrupt          # XIP + SysTick interrupt
 ./test-xip/build-and-run.sh interrupt-static   # XIP + TIM2 interrupt + static
 ./test-xip/build-and-run.sh interrupt-static-direct  # direct calls + interrupts
-./test-xip/build-and-run.sh static2            # SPI flash storage + XIP
+./test-xip/build-and-run.sh static/spi-flash            # SPI flash storage + XIP
 ```
 
 | Target | App | Loader | Description |
