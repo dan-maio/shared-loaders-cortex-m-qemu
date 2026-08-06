@@ -26,7 +26,7 @@ Designed for freestanding, zero-allocation micro-kernels. It loads Position-Inde
 
 ### 2.1. Key Implementation Files
 - **`src/dynamic-nolib/dl.cpp`** ([dl.cpp](../src/dynamic-nolib/dl.cpp)): Implements `dlopen_source()`, `dlsym()`, and `dlclose()`.
-- **`src/port/pic-trampoline.S`** ([pic-trampoline.c](../src/port/pic-trampoline.c)): Contains assembly shims to load and swap the `r10` GOT base register.
+- **`src/port/pic-trampoline.c`** ([pic-trampoline.c](../src/port/pic-trampoline.c)): Contains assembly shims to load and swap the `r10` GOT base register.
 - **`src/port/dl-cross-call.c`** ([dl-cross-call.c](../src/port/dl-cross-call.c)): Inter-library routing trampoline.
 
 ### 2.2. Indirection Mechanism (r10 GOT Swapping)

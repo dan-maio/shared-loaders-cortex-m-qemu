@@ -481,7 +481,7 @@ arm-none-eabi-g++ -fpic -msingle-pic-base -mpic-register=r10 -nostdlib -shared \
 | `src/xip/dynamic-nolib/adapter.cpp` | xip-dynamic-nolib | Dynamic-nolib XIP adapter |
 | `src/xip/dynamic-nolib/xip-cross-call.c` | xip-dynamic-nolib | Thin wrapper including shared trampoline with nolib defaults |
 | `src/xip/dynamic-newlib/adapter.cpp` | xip-dynamic-newlib | Dynamic-newlib XIP adapter |
-| `src/xip/dynamic-newlib/xip-cross-call.c` | xip-dynamic-newlib | Thin wrapper including shared trampoline with newlib defaults |
+| `src/xip/xip-cross-call.c` | xip-common | Shared cross-call trampoline; the per-loader wrappers in `src/port/` define XIP_CROSS_LOOKUP and include it |
 | `src/port/pic-trampoline.c` | xip-dynamic-newlib | VFP trampoline (enter lib with r10 set) |
 | `src/port/unwind-find-exidx.c` | xip-dynamic-newlib | EHABI .ARM.exidx lookup |
 | `src/xip/static/adapter.cpp` | xip-static | Static loader XIP adapter |
