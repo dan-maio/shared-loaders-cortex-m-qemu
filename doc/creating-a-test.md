@@ -23,14 +23,14 @@ it. This document is about what goes *in* it.
 ## Decision 1 — Board startup
 
 Two platform families under `test/platforms/`, selected by `SCL_PLATFORM`
-(default `weact-f411ce`):
+(default `board`):
 
 | Platform | Model | Link flags | What you get |
 |---|---|---|---|
-| `weact-f411ce` | **freestanding / nolib** | `-pie -nostdlib -nostartfiles` | own `startup.c`, `semihost.c`, `libc-shim.c`, `printf-shim.c` |
-| `weact-f411ce-hosted` | **hosted / newlib** | `-nostartfiles --specs=nano.specs` | vendored µOS++ system tree: newlib `syscalls.c`, `sbrk.c`, `cxx.cpp`, full HAL |
+| `board` | **freestanding / nolib** | `-pie -nostdlib -nostartfiles` | own `startup.c`, `semihost.c`, `libc-shim.c`, `printf-shim.c` |
+| `board-hosted` | **hosted / newlib** | `-nostartfiles --specs=nano.specs` | vendored µOS++ system tree: newlib `syscalls.c`, `sbrk.c`, `cxx.cpp`, full HAL |
 
-`weact-f411ce` and `weact-f411ce-hosted` are the same two for the other board.
+`board` and `board-hosted` are the same two for the other board.
 `test/platforms/common/` holds the board-independent glue (`crt.cpp`,
 `semihost-file.cpp`, `dl-semihost.cpp`, `scl-log-semihost.cpp`) that both share.
 

@@ -172,7 +172,7 @@ CXX: -fno-threadsafe-statics
 
 **Key difference:** `SCL_HOSTED=ON` — enables `std::vector`-based helpers like `collect_relocations()` and the full `dynamic_linker` class with `std::vector<reloc_plan>`.
 
-**Platform:** Uses `platform::weact-f411ce-hosted` (CMSIS + HAL + newlib)
+**Platform:** Uses `platform::board-hosted` (CMSIS + HAL + newlib)
 
 ---
 

@@ -2819,7 +2819,7 @@ toolchain is only needed for the **test apps** that link against newlib startup 
 
 ### 13.3 Platform Library (`../test/platforms/board/`)
 
-The **`platform::weact-f411ce`** INTERFACE target (`../test/platforms/board/cmake/platform-library.cmake:1`) provides:
+The **`platform::board`** INTERFACE target (`../test/platforms/board/cmake/platform-library.cmake:1`) provides:
 
 - **Sources:** `startup.c` (reset vector, .data copy, .bss zero, FPU enable, `main` call), `board.c` (clock init, SysTick), `semihost.c`/`semihost-file.cpp` (ARM semihosting calls), `libc-shim.c` (memcpy/memset/strcmp for `-nostdlib`), `crt.cpp` (operator new/delete), `printf-shim.c`, `dl-semihost.cpp`, `scl-log-semihost.cpp`
 - **Link recipe:** `-pie -nostdlib -nostartfiles -Wl,-Bsymbolic --unresolved-symbols=ignore-all -Wl,-E --gc-sections -L<ldscripts>`
@@ -2844,7 +2844,7 @@ scl_test_app(<target-name>
 
 **What it does automatically:**
 1. Globs `src/*.c` and `src/*.cpp` from the app directory
-2. Adds the platform library (`platform::weact-f411ce`)
+2. Adds the platform library (`platform::board`)
 3. Links the specified SCL libraries
 4. Defines `DL_LIB_DIR=<test/fixtures>` (absolute path to committed `.so` files)
 5. Adds EH anchors (`__cxa_throw`, `__cxa_begin_catch`, `__gxx_personality_v0`, `__dynamic_cast`, ...)
@@ -2888,7 +2888,7 @@ cmake -S test-dynamic/test-dynamic-newlib -B test/build-dynamic-newlib-hf \
 cmake --build test/build-dynamic-newlib-hf -j
 ```
 
-The hosted platform (`weact-f411ce-hosted`) is vendored under `../test/platforms/board-hosted/vendor/` and provides its own `mem-sh.ld`, `libs-sh.ld`, `sections-dyn.ld` linker scripts (with the `_reloc` table), plus HAL/CMSIS/newlib startup.
+The hosted platform (`board-hosted`) is vendored under `../test/platforms/board-hosted/vendor/` and provides its own `mem-sh.ld`, `libs-sh.ld`, `sections-dyn.ld` linker scripts (with the `_reloc` table), plus HAL/CMSIS/newlib startup.
 
 #### ET_REL App (scl::reloc)
 
@@ -2899,7 +2899,7 @@ cmake -S test-relocatable -B test-relocatable/build \
 cmake --build test-relocatable/build -j
 ```
 
-The ET_REL app (`../test-relocatable/CMakeLists.txt:26`) is a plain non-PIC firmware — no `-pie`, no `-Wl,-E`, no `.dynsym`/`GOT`/`_DYNAMIC`. It reuses only the **sources** from `weact-f411ce` platform (startup, semihost, board, crt, libc-shim) but its **own** linker script (`../test-relocatable/platform/reloc.ld`). Links `scl::reloc` and builds ET_REL fixtures automatically.
+The ET_REL app (`../test-relocatable/CMakeLists.txt:26`) is a plain non-PIC firmware — no `-pie`, no `-Wl,-E`, no `.dynsym`/`GOT`/`_DYNAMIC`. It reuses only the **sources** from `board` platform (startup, semihost, board, crt, libc-shim) but its **own** linker script (`../test-relocatable/platform/reloc.ld`). Links `scl::reloc` and builds ET_REL fixtures automatically.
 
 #### Static Patcher App (scl::static)
 
@@ -3197,7 +3197,7 @@ All 29 CMakeLists.txt files, organised hierarchically from repository root to le
 **Path:** `../test-dynamic/test-dynamic-newlib/test1/CMakeLists.txt`
 **Target:** `scl-fw-dynamic-newlib1`
 **Role:** Static-loader battery — load mylib1.so over semihosting, dlsym/call, negative lookup, dlclose, reload proves journal revert, missing-file error.
-**Config:** Links `platform::weact-f411ce-hosted` + `scl::dynamic-newlib`. Builds fixture `.so` via custom `make` target. Uses hosted toolchain.
+**Config:** Links `platform::board-hosted` + `scl::dynamic-newlib`. Builds fixture `.so` via custom `make` target. Uses hosted toolchain.
 **Options:**
 
 | Option | Description |
@@ -3730,8 +3730,8 @@ Every new test requires six sequential decisions. Each constrains the ones after
 
 | Platform | Runtime | Code Model | Float | Used By |
 |----------|---------|-----------|-------|---------|
-| `weact-f411ce` | Bare metal (~400 lines) | `-fpic -pie`, `_DYNAMIC` parsed at boot | Hard | dyn1/2, ovl1, flatfs, xip-nolib |
-| `weact-f411ce-hosted` | CMSIS + HAL + newlib | Non-PIC, `_reloc` table | Soft/Hard | dynamic-newlib1/2, xip-newlib, xip-static |
+| `board` | Bare metal (~400 lines) | `-fpic -pie`, `_DYNAMIC` parsed at boot | Hard | dyn1/2, ovl1, flatfs, xip-nolib |
+| `board-hosted` | CMSIS + HAL + newlib | Non-PIC, `_reloc` table | Soft/Hard | dynamic-newlib1/2, xip-newlib, xip-static |
 
 Choice is nearly irreversible — switching platforms means rewriting the entire link recipe.
 

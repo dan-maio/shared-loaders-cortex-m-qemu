@@ -388,7 +388,7 @@ several were not visible from the static analysis above.
    first `dlopen` HardFaulted before any XIP logic mattered. **Cause:** a loaded
    library imports libc/libm/C++ runtime and needs `main`'s constructors, a real heap
    and exported symbols; the freestanding platform provides none. **Fix:** build
-   `test-xip` on the **newlib-hosted platform** (`weact-f411ce-hosted`): newlib
+   `test-xip` on the **newlib-hosted platform** (`board-hosted`): newlib
    `startup.c` runs `main`'s `.init_array`, `sbrk` gives a heap, `libc`/`libm`/
    `libstdc++` are linked, `-pie -Wl,-E` exports `main`'s symbols, and the exception
    handlers dump registers. A reviewed linker script (`sections-flatfs-hosted.ld`)

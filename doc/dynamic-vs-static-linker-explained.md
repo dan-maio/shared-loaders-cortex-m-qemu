@@ -1020,7 +1020,7 @@ the chain:
 ```
 test-dynamic-newlib/test1/CMakeLists.txt:
   target_link_libraries(scl-fw-dynamic-newlib1 PRIVATE
-      platform::weact-f411ce-hosted
+      platform::board-hosted
       scl::dynamic-newlib)                          ← this is scl-dynamic-newlib from CMakeLists.txt
 ```
 

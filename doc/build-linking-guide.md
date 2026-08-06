@@ -197,7 +197,7 @@ The SCL ships **two** firmware "platform libraries" (xpack-style INTERFACE
 targets) because its loaders were born in two different environments. They need
 different *global* flags, so they cannot share a CMake build tree.
 
-| | `platform::weact-f411ce` (freestanding) | `platform::weact-f411ce-hosted` |
+| | `platform::board` (freestanding) | `platform::board-hosted` |
 |---|---|---|
 | Runtime | ~400 lines bare metal (own startup/semihost/libc-shim) | full CMSIS + ST HAL + newlib-nano |
 | Code model | `-fpic -pie`, `_DYNAMIC` parsed at boot | non-PIC, `_reloc` table (like §1.2) |

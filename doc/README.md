@@ -177,18 +177,18 @@ needed:
 
 | Test app | Its sources | Platform |
 |---|---|---|
-| `scl-fw-dyn1` / `dyn2` | `test-dynamic/test-dynamic-nolib/test{1,2}/src/` | `weact-f411ce` (freestanding) |
-| `scl-fw-flatfs` | `test-dynamic/test-dynamic-nolib/test3/{src,include}/` (flat-fs backend included) | `weact-f411ce` |
-| `scl-fw-ovl1` | `test-overlay/test1/src/` (driver + overlay modules) | `weact-f411ce` |
-| `scl-fw-dynamic-newlib1` / `dynamic-newlib2` | `test-dynamic/test-dynamic-newlib/test{1,2}/` + the vendored suite | `weact-f411ce-hosted` |
+| `scl-fw-dyn1` / `dyn2` | `test-dynamic/test-dynamic-nolib/test{1,2}/src/` | `board` (freestanding) |
+| `scl-fw-flatfs` | `test-dynamic/test-dynamic-nolib/test3/{src,include}/` (flat-fs backend included) | `board` |
+| `scl-fw-ovl1` | `test-overlay/test1/src/` (driver + overlay modules) | `board` |
+| `scl-fw-dynamic-newlib1` / `dynamic-newlib2` | `test-dynamic/test-dynamic-newlib/test{1,2}/` + the vendored suite | `board-hosted` |
 | `f411ce-sh` (scl::static patcher) | `test-static/test-static/` (`src/`, `system/`, `ldscripts/`, `libsh1/2`) | self-contained (µOS++ soft-float) |
-| `scl-fw-xip-*` | `test-xip/test-xip-*/src/` | `weact-f411ce-hosted` |
-| `scl-fw-xip-static-spi-flash` | `test-xip/test-xip-static/spi-flash/src/` | `weact-f411ce-hosted` |
+| `scl-fw-xip-*` | `test-xip/test-xip-*/src/` | `board-hosted` |
+| `scl-fw-xip-static-spi-flash` | `test-xip/test-xip-static/spi-flash/src/` | `board-hosted` |
 
 The freestanding board platform (`test/platforms/board/`) owns
 startup/board/semihosting/libc-shim/crt/printf-shim/`dl_semihost`/`scl_log`
 bridge and all freestanding linker scripts. The hosted platform
-(`weact-f411ce-hosted/vendor/`) vendors the CMSIS/HAL/newlib environment, the
+(`board-hosted/vendor/`) vendors the CMSIS/HAL/newlib environment, the
 `_reloc` linker scripts, the DYN suite and the fixture-library sources.
 
 Fixtures used at run time: the committed `test/fixtures/*.so` (freestanding
@@ -313,7 +313,7 @@ newlib heap — a hosted CMSIS/HAL environment). API in
   `.dynsym`/`.rel.dyn` in the image) are vendored under
 `test/platforms/board-hosted/vendor/common/ldscripts/{mem-sh,libs-sh}.ld`
    + `.../firmware/ldscripts/sections-dyn.ld`, used by the
-   `weact-f411ce-hosted` test platform.
+   `board-hosted` test platform.
 * Unresolved imports fall back to a **known-symbol table** inside
   `dynamic-linker.cpp` (libc entry points such as `printf`/`malloc`/`memcpy`,
   float libm, plus weak `AA`/`BB`/`s1` test globals the app may override) —
@@ -467,7 +467,7 @@ test tree ships two "platform libraries" (xpack-style INTERFACE targets that
 contribute sources, include paths and the link recipe to any app that links
 them):
 
-| | `platform::weact-f411ce` (freestanding) | `platform::weact-f411ce-hosted` |
+| | `platform::board` (freestanding) | `platform::board-hosted` |
 |---|---|---|
 | Runtime | none: ~400 lines of bare metal (`startup.c`, `board.c`, `semihost.c`, `libc-shim.c`, `crt.cpp`) | full CMSIS + ST HAL + newlib-nano (heap, `printf`, C++ library) |
 | Code model | `-fpic -pie`, firmware exports symbols via `-Wl,-E`, `_DYNAMIC` parsed at boot | non-PIC, symbols discovered through the `_reloc` table |
@@ -484,7 +484,7 @@ the static apps configure their own tree with the hosted toolchain
 ### 4.3 On-target firmware test apps (`test/test-*`) — board required
 
 Each `testN` is a **complete Cortex-M4 firmware application** (its `src/main.*`
-+ the `platform::weact-f411ce` interface library + the SCL), flashed and run
++ the `platform::board` interface library + the SCL), flashed and run
 on a WeAct BlackPill STM32F411CE through OpenOCD with the semihosting console as output.
 
 Build **all** freestanding apps (from the repo root):
@@ -519,7 +519,7 @@ test/tools/flash-run.sh path/to/any.hex         # or an explicit path
 | `scl-fw-dyn1` (`test-dynamic-nolib/test1`) | the demo: dlopen/dlsym/call/dlclose `mylib1/2.so`, `libcppsh.so` (C++), `libcppeh.so` (exceptions across the boundary), reload proof | links `scl::dynamic-nolib`; `sections.ld`; fixtures served over **semihosting** from `test/fixtures/` (absolute `DL_LIB_DIR` is injected, so the OpenOCD CWD does not matter); default C++ EH anchors |
 | `scl-fw-dyn2` (`test-dynamic-nolib/test2`) | the 16-test cross-module battery: c1/c2/cpp3, cross-library calls (`r10` routing), lazy vs eager binding, cross-module exceptions, GOT/PLT dump walkthroughs | additionally `LINK_LIBM` + anchors `sinf cosf logf sqrtf` (cpp3's hard-float math resolves against main) and `trace_event trace_u32 fm_callback fm_var fm_info` (the FM-exported test surface that only loaded libs reference) |
 | `scl-fw-ovl1` (`test-overlay/test1`) | overlays-vs-dynamic comparison: same three scenarios through `scl::overlay` (link-time binding, one shared SRAM window) and through `scl::dynamic-nolib` (runtime relocation), addresses printed side by side | links `scl::dynamic-nolib` **and** `scl::overlay`; `LDSCRIPT sections-overlay.ld` (the `OVERLAY : NOCROSSREFS` block + `OVL` memory region); same battery anchors + libm |
-| `scl-fw-dynamic-newlib1` (`test-dynamic-newlib/test1`) | static loader (`scl::dynamic-newlib`) battery: load `mylib1.so` over semihosting, `dlsym`+call, negative lookup, `dlclose`; reload proves the patch_journal reverted every patch; missing-file error path | **separate build tree** with the HOSTED toolchain (`cmake -S test-dynamic/test-dynamic-newlib -B test/build-dynamic-newlib -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi-hosted.cmake`) — self-skips inside the freestanding `test-dynamic/build`; platform = `weact-f411ce-hosted` (vendored CMSIS/HAL/newlib + `_reloc` ldscripts); fixture `.so` built automatically; `-DSCL_HF=ON` for the hard-float variant |
+| `scl-fw-dynamic-newlib1` (`test-dynamic-newlib/test1`) | static loader (`scl::dynamic-newlib`) battery: load `mylib1.so` over semihosting, `dlsym`+call, negative lookup, `dlclose`; reload proves the patch_journal reverted every patch; missing-file error path | **separate build tree** with the HOSTED toolchain (`cmake -S test-dynamic/test-dynamic-newlib -B test/build-dynamic-newlib -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi-hosted.cmake`) — self-skips inside the freestanding `test-dynamic/build`; platform = `board-hosted` (vendored CMSIS/HAL/newlib + `_reloc` ldscripts); fixture `.so` built automatically; `-DSCL_HF=ON` for the hard-float variant |
 
 To add an app: create `test/test-<flavour>/testN/{src,include,CMakeLists.txt}`
 with
@@ -757,14 +757,14 @@ Runtime (not #define) knobs of `scl::dynamic-nolib`: `dl_enable_cross_call(bool)
 
 | | toolchain file | platform | SCL libs | ldscript(s) | fixtures (runtime) | extra anchors / libs | defines |
 |---|---|---|---|---|---|---|---|
-| `scl-fw-dyn1` | `arm-none-eabi.cmake` | `weact-f411ce` | `scl::dynamic-nolib` | `sections.ld` (+`mem.ld`) | `test/fixtures/{mylib1,mylib2,libcppsh,libprov,libcons,libcppeh}.so` | `printf puts` (+ EH set) | `DL_LIB_DIR` |
-| `scl-fw-dyn2` | `arm-none-eabi.cmake` | `weact-f411ce` | `scl::dynamic-nolib` | `sections.ld` | `test/fixtures/{c1,c2,cpp3,libcppeh,ehx_catch}.so` + **`notelf.bin`** (TEST12) | `sinf cosf logf sqrtf trace_event trace_u32 fm_callback fm_var fm_info` + `LINK_LIBM` (+ EH set) | `DL_LIB_DIR` |
-| `scl-fw-ovl1` | `arm-none-eabi.cmake` | `weact-f411ce` | `scl::dynamic-nolib` + `scl::overlay` | `sections-overlay.ld` (+`mem-overlay.ld`: `OVL` @ 0x20018000/16K) | `test/fixtures/{c1,c2,cpp3}.so` | battery set + `LINK_LIBM`; overlay modules compiled `-fno-pic -mlong-calls` | `DL_LIB_DIR` |
-| `scl-fw-flatfs` | `arm-none-eabi.cmake` | `weact-f411ce` | `scl::dynamic-nolib` | `sections-flatfs.ld` | provisions from `test/fixtures/` (c1,c2,cpp3,libcppeh,ehx_catch,notelf.bin) into flash sectors 6–7 | battery set + `printf puts` + `LINK_LIBM`; backend srcs in `test3/{src,include}` | `DL_LIB_DIR` |
-| `scl-fw-dynamic-newlib2` | `arm-none-eabi-hosted.cmake` (`test/build-dynamic-newlib[-hf]`) | `weact-f411ce-hosted` | `scl::dynamic-newlib` | vendored `mem-sh`+`libs-sh`+`sections-dyn.ld` | full set staged into **/tmp** by the flash wrapper (soft `build/` / hard `build_hf/`); built by the CMake fixture targets | nano.specs set | `DYN`, HAL set, `SCL_HOSTED` |
-| `scl-fw-dynamic-newlib1` | `arm-none-eabi-hosted.cmake` (`test/build-dynamic-newlib[-hf]`) | `weact-f411ce-hosted` (vendored) | `scl::dynamic-newlib` | vendored `mem-sh`+`libs-sh`+`sections-dyn.ld` | `vendor/libs/build[_hf]/mylib1.so` (auto-built), read via `SCL_SO_DIR` (no /tmp) | `--specs=nano.specs -u _printf_float`, `stdc++ m` | `DYN`, `SCL_SO_DIR`, HAL set, `SCL_HOSTED` |
-| `scl-fw-xip-*` | `arm-none-eabi.cmake` | `weact-f411ce-hosted` | `scl::xip-*` | `sections-flatfs-hosted.ld` | XIP-compatible fixtures (built with `build-xip-libs.sh`) | `DL_LIB_DIR` | `HARD_FLOAT` |
-| `scl-fw-xip-static-spi-flash` | `arm-none-eabi.cmake` | `weact-f411ce-hosted` | `scl::xip-common` | `sections-flatfs-hosted.ld` | XIP-compatible test-drv fixtures (built with `build-xip-drv.sh`) | `DL_LIB_DIR` | `HARD_FLOAT` |
+| `scl-fw-dyn1` | `arm-none-eabi.cmake` | `board` | `scl::dynamic-nolib` | `sections.ld` (+`mem.ld`) | `test/fixtures/{mylib1,mylib2,libcppsh,libprov,libcons,libcppeh}.so` | `printf puts` (+ EH set) | `DL_LIB_DIR` |
+| `scl-fw-dyn2` | `arm-none-eabi.cmake` | `board` | `scl::dynamic-nolib` | `sections.ld` | `test/fixtures/{c1,c2,cpp3,libcppeh,ehx_catch}.so` + **`notelf.bin`** (TEST12) | `sinf cosf logf sqrtf trace_event trace_u32 fm_callback fm_var fm_info` + `LINK_LIBM` (+ EH set) | `DL_LIB_DIR` |
+| `scl-fw-ovl1` | `arm-none-eabi.cmake` | `board` | `scl::dynamic-nolib` + `scl::overlay` | `sections-overlay.ld` (+`mem-overlay.ld`: `OVL` @ 0x20018000/16K) | `test/fixtures/{c1,c2,cpp3}.so` | battery set + `LINK_LIBM`; overlay modules compiled `-fno-pic -mlong-calls` | `DL_LIB_DIR` |
+| `scl-fw-flatfs` | `arm-none-eabi.cmake` | `board` | `scl::dynamic-nolib` | `sections-flatfs.ld` | provisions from `test/fixtures/` (c1,c2,cpp3,libcppeh,ehx_catch,notelf.bin) into flash sectors 6–7 | battery set + `printf puts` + `LINK_LIBM`; backend srcs in `test3/{src,include}` | `DL_LIB_DIR` |
+| `scl-fw-dynamic-newlib2` | `arm-none-eabi-hosted.cmake` (`test/build-dynamic-newlib[-hf]`) | `board-hosted` | `scl::dynamic-newlib` | vendored `mem-sh`+`libs-sh`+`sections-dyn.ld` | full set staged into **/tmp** by the flash wrapper (soft `build/` / hard `build_hf/`); built by the CMake fixture targets | nano.specs set | `DYN`, HAL set, `SCL_HOSTED` |
+| `scl-fw-dynamic-newlib1` | `arm-none-eabi-hosted.cmake` (`test/build-dynamic-newlib[-hf]`) | `board-hosted` (vendored) | `scl::dynamic-newlib` | vendored `mem-sh`+`libs-sh`+`sections-dyn.ld` | `vendor/libs/build[_hf]/mylib1.so` (auto-built), read via `SCL_SO_DIR` (no /tmp) | `--specs=nano.specs -u _printf_float`, `stdc++ m` | `DYN`, `SCL_SO_DIR`, HAL set, `SCL_HOSTED` |
+| `scl-fw-xip-*` | `arm-none-eabi.cmake` | `board-hosted` | `scl::xip-*` | `sections-flatfs-hosted.ld` | XIP-compatible fixtures (built with `build-xip-libs.sh`) | `DL_LIB_DIR` | `HARD_FLOAT` |
+| `scl-fw-xip-static-spi-flash` | `arm-none-eabi.cmake` | `board-hosted` | `scl::xip-common` | `sections-flatfs-hosted.ld` | XIP-compatible test-drv fixtures (built with `build-xip-drv.sh`) | `DL_LIB_DIR` | `HARD_FLOAT` |
 
 All on-target apps additionally need: the board on USB (CMSIS-DAP (0x1a86:0x8011)), the `.hex` (never the `.elf` — PIE header page), `arm semihosting enable` before `reset run`, and no `verify` (its target CRC double-faults this core). The flat-fs firmware's 256K filesystem lives in sectors 6–7 and **survives code-only reflashes**; re-provisioning happens only when the archive is absent (or after `fs_format()`).
 
