@@ -161,10 +161,15 @@ reloc::module_set g_set;
 bool load_set_of(const char* const* names, int n) {
     if (n > 3) return false;
     for (int i = 0; i < n; ++i) {
-        char path[128]; int k = 0;
-        for (const char* p = RELOC_LIB_DIR "/"; *p; ++p) path[k++] = *p;
-        for (const char* p = names[i]; *p; ++p) path[k++] = *p;
-        for (const char* p = ".rel.o"; *p; ++p) path[k++] = *p;
+        // Bounded: RELOC_LIB_DIR is a build-time define, and a deep enough
+        // target directory made these three unchecked writes run past the end
+        // of path[] and smash the stack -- the firmware died on its first
+        // module open, looking like a loader fault. Same guard style the
+        // flatfs and spi-flash tests already use.
+        char path[256]; std::size_t k = 0;
+        for (const char* p = RELOC_LIB_DIR "/"; *p && k + 1 < sizeof path; ++p) path[k++] = *p;
+        for (const char* p = names[i]; *p && k + 1 < sizeof path; ++p) path[k++] = *p;
+        for (const char* p = ".rel.o"; *p && k + 1 < sizeof path; ++p) path[k++] = *p;
         path[k] = 0;
         std::size_t sz = read_file(path, g_img[i], sizeof g_img[i]);
         if (!sz) { trace_puts("  read FAILED: "); trace_puts(path); trace_putc('\n'); return false; }

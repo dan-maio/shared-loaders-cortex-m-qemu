@@ -185,11 +185,16 @@ loader::result<std::uint32_t> main_resolve(void*, std::string_view n) {
 }
 
 /* Build path: RELOC_LIB_DIR/<name>.rel.o */
-void make_path(char* path, const char* name) {
-    int k = 0;
-    for (const char* p = RELOC_LIB_DIR "/"; *p; ++p) path[k++] = *p;
-    for (const char* p = name; *p; ++p) path[k++] = *p;
-    for (const char* p = ".rel.o"; *p; ++p) path[k++] = *p;
+template <std::size_t N>
+void make_path(char (&path)[N], const char* name) {
+    // N is deduced from the caller's array, so the bound cannot disagree with
+    // the buffer. Previously this took a bare char* and wrote until the inputs
+    // ran out; RELOC_LIB_DIR is a build-time define, and a long enough one
+    // overran every caller's path[] and corrupted the stack.
+    std::size_t k = 0;
+    for (const char* p = RELOC_LIB_DIR "/"; *p && k + 1 < N; ++p) path[k++] = *p;
+    for (const char* p = name; *p && k + 1 < N; ++p) path[k++] = *p;
+    for (const char* p = ".rel.o"; *p && k + 1 < N; ++p) path[k++] = *p;
     path[k] = 0;
 }
 
@@ -222,7 +227,7 @@ bool load_set_of(const char* const* names, int n) {
 
 /* Load one module into a specific arena (for multi-instance tests) */
 bool load_into(const char* name, int slot, std::span<std::byte> arena, reloc::module_set& out) {
-    char path[128]; make_path(path, name);
+    char path[256]; make_path(path, name);
     int h = semihost_open(path, 1);
     if (h < 0) return false;
     long n = semihost_flen(h); semihost_close(h);
@@ -280,7 +285,7 @@ int main(void) {
     std::byte rbuf[16 * 1024];
     int count = 0;
     for (int i = 0; i < RELOC_COUNT; ++i) {
-        char path[128]; make_path(path, reloc_names[i]);
+        char path[256]; make_path(path, reloc_names[i]);
         long sz = flen(path);
         if (sz <= 0 || (std::size_t)sz > sizeof rbuf) {
             log_error("skip %s (sz=%ld)", reloc_names[i], sz); continue;
