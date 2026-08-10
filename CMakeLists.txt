@@ -234,3 +234,24 @@ if(NOT TARGET gen-symtab-host)
     )
     add_custom_target(gen-symtab-host DEPENDS "${SCL_HOST_GEN_SYMTAB}")
 endif()
+
+# Define host ELF-to-JSON exporter for AetherELF GUI (compiled for the host machine)
+set(SCL_HOST_ELF2JSON "${CMAKE_BINARY_DIR}/tools/elf2json" CACHE INTERNAL "")
+
+if(NOT TARGET elf2json-host)
+    add_custom_command(
+        OUTPUT "${SCL_HOST_ELF2JSON}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/tools"
+        COMMAND c++ -std=c++20
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/elf2json.cpp"
+                "${CMAKE_CURRENT_SOURCE_DIR}/common-elf-reader/src/elf-image.cpp"
+                "-I${CMAKE_CURRENT_SOURCE_DIR}/common-elf-reader/include"
+                -o "${SCL_HOST_ELF2JSON}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/elf2json.cpp"
+                "${CMAKE_CURRENT_SOURCE_DIR}/common-elf-reader/src/elf-image.cpp"
+                "${CMAKE_CURRENT_SOURCE_DIR}/common-elf-reader/include/loader/elf-image.hpp"
+        COMMENT "Building C++20 elf2json host tool for AetherELF GUI"
+        VERBATIM
+    )
+    add_custom_target(elf2json-host DEPENDS "${SCL_HOST_ELF2JSON}")
+endif()

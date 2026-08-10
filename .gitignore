@@ -17,5 +17,9 @@ test-drv (Module class)/
 test-drv (Module-class direct-calls)/
 test-drv (copy 1)/
 
+# Compiled host tools (built from .cpp sources)
+tools/gen-symtab
+tools/elf2json
+
 # Claude Code per-machine settings (permissions etc.) — not shared
 .claude/settings.local.json
