@@ -95,6 +95,21 @@ bool symbol_table::has(std::string_view name) const {
     return false;
 }
 
+bool symbol_table::remove(std::string_view name) {
+    bool removed = false;
+    for (uint32_t i = 0; i < count_; ++i) {
+        if (entries_[i].name == name) {
+            // Shift the tail down; keep the array compact.
+            for (uint32_t j = i; j + 1 < count_; ++j)
+                entries_[j] = entries_[j + 1];
+            --count_;
+            --i;              // re-check the slot that just slid down
+            removed = true;
+        }
+    }
+    return removed;
+}
+
 void symbol_table::clear() {
     delete[] entries_;
     entries_  = nullptr;

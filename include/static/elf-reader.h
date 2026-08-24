@@ -109,6 +109,9 @@ public:
     void add_weak(std::string_view name, uint32_t address);
     uint32_t find(std::string_view name) const;
     bool has(std::string_view name) const;
+    // Remove a name and all entries for it (used by Module::unload to unpublish
+    // a module's exports). Returns true if anything was removed.
+    bool remove(std::string_view name);
     void clear();
 private:
     struct Entry {

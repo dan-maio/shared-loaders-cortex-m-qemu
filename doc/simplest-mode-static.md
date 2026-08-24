@@ -307,10 +307,19 @@ public:
     bool load_buf(const uint8_t* raw, uint32_t rawsz,
                   uint8_t* exec_buf, uint32_t exec_sz,
                   elf_loader::symbol_table* syms);            // from a raw buffer
-    void* sym(const char* name) const;                        // name -> address
+
+    static uint32_t image_size(const char* path);             // buffer size needed (0 on error)
+    bool unload();                                            // run .fini_array, unpublish exports, free buffer
+
+    void* sym(const char* name) const;                        // name -> address (hash-accelerated)
     template<typename T> T sym(const char* name) const;       // typed cast helper
     Call operator[](const char* name);                        // callable functor
-    module_error last_error() const;
+
+    module_error last_error() const;                          // coarse error
+    int         last_detail() const;                          // elf_loader::loader_error as int
+    const char* last_error_string() const;                    // "InvalidSegment", ...
+    bool        loaded() const;                               // true once loaded
+    const std::vector<std::string>& dependencies() const;     // DT_NEEDED sonames
 };
 }
 ```
@@ -1380,3 +1389,44 @@ If you remember nothing else: **the library must be position-independent and
 explicit about what it borrows; your program must provide and keep-alive every
 borrowed name, using matching ABI and C linkage, and must place the library in
 memory before the first call.**
+
+---
+
+## 21. What `scl::static` still lacks — and what this branch improved
+
+### 21.1 Improvements shipped here
+
+Concrete upgrades to the `scl::Module` facade (all backward-compatible — existing
+callers are unaffected):
+
+| Improvement | API | Notes |
+|---|---|---|
+| **Unload** | `Module::unload()` | runs `.fini_array` in reverse, unpublishes the module's exports from the `symbol_table`, zeros the buffer, resets the module. |
+| **Richer errors** | `last_detail()`, `last_error_string()` | exposes the fine-grained `loader_error` (`InvalidSegment`, `InvalidRelocation`, …) that `Module` previously collapsed into `LOAD_FAILED`. |
+| **Buffer sizing** | `Module::image_size(path)` | returns the exact byte count the loader needs, so callers stop guessing a fixed 32 KiB. |
+| **Dependency visibility** | `Module::dependencies()` | surfaces the `DT_NEEDED` sonames the library declares (the app still loads each one first). |
+| **Faster lookup** | `Module::sym()` | now walks the SysV `.hash` table when present, with the original linear scan as fallback (identical semantics). |
+| **Leak fix** | — | `Module::build()` now frees the temporary patch arrays (previously leaked per load). |
+| **Export tracking** | `symbol_table::remove()` | new removal primitive so `unload()` can unpublish exactly what a module registered. |
+
+### 21.2 Still open (intentional, larger design work)
+
+These remain unimplemented because they change behaviour or need machinery that
+already lives in a sibling loader; porting them is a design decision, not a bug:
+
+| Gap | Where the machinery already exists |
+|---|---|
+| **Byte-exact unload** — reverting *main's* GOT slots that pointed at the module | `scl::dynamic-newlib`'s `patch_journal` (`src/dynamic-newlib/patch-journal.cpp`) |
+| **Lazy PLT binding** (patch GOT on first call) | `scl::dynamic-nolib`'s `lazy-resolve` / `lazy-plt` |
+| **Full DT_NEEDED auto-load** (open + load each dependency itself) | `shlib_loader::resolve_dependencies()` hook (`shlib-loader.cpp:274`) |
+| **Hard-float variant** | a config matter, not code — build fixture+firmware with `-mfloat-abi=hard` and matching `-mfpu` |
+| **Multiple instances / reference counting** of the same `.so` | — |
+| **Per-module visibility scopes** (RTLD_LOCAL vs RTLD_GLOBAL) | — |
+| **Reentrancy lock** for RTOS loads during calls | — |
+
+> **On `unload()`'s honesty:** it runs destructors and releases the library, but it
+> does **not** revert the addresses it wrote into *main's own* GOT slots. A later
+> call through those slots would jump into zeroed memory. To make `unload()` safe
+> against that, fold in the `patch_journal`; until then, treat `unload()` as "free
+> this module so I can load another into the same buffer" and re-load before any
+> further calls.
