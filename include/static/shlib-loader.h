@@ -6,6 +6,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <utility>
 
 namespace elf_loader {
 
@@ -59,6 +60,11 @@ public:
     uint32_t patch_main(symbol_table* global_syms);
     loader_error execute_constructors();
 
+    /// Journal of every word patch_main wrote into main's memory (address +
+    /// original value), for a byte-exact unload. Moved out by scl::Module.
+    const std::vector<patch_record>& main_journal() const { return main_journal_; }
+    std::vector<patch_record> take_journal() { return std::move(main_journal_); }
+
     unsigned int resolve_weak_function(funcm f);
 
     loader_error resolve_dependencies(symbol_table* global_syms,
@@ -83,6 +89,7 @@ private:
     uint8_t* ram_shlib_address_{nullptr};
     std::vector<weak_main_sym> weak_sym_cache_{};
     std::vector<std::string> dependencies_{};
+    std::vector<patch_record> main_journal_{};
     // Auto-loaded DT_NEEDED dependencies are kept here so their loaders (and
     // the parsed images / section maps they own) outlive resolve_dependencies.
     std::vector<std::unique_ptr<shlib_loader>> loaded_deps_{};

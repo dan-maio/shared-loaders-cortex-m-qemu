@@ -309,7 +309,7 @@ public:
                   elf_loader::symbol_table* syms);            // from a raw buffer
 
     static uint32_t image_size(const char* path);             // buffer size needed (0 on error)
-    bool unload();                                            // run .fini_array, unpublish exports, free buffer
+    bool unload();                                            // byte-exact revert + .fini_array + unpublish + free
 
     void* sym(const char* name) const;                        // name -> address (hash-accelerated)
     template<typename T> T sym(const char* name) const;       // typed cast helper
@@ -472,7 +472,7 @@ You *can* reduce it to a one-liner per library and tuck the buffer sizes behind
 | **Build-time linking** | the *which library* decision is made by `-lsh1 …`, not by a free-form runtime path. (The `.so` is still read from a file at run time — only the *symbol binding* is pre-linked.) |
 | **Soft-float ABI** | fixtures and firmware share `-mfloat-abi=soft`. Hard-float belongs to the `dynamic-*`/XIP loaders. |
 | **No lazy binding** | every GOT slot is patched eagerly at load; there is no on-first-call PLT resolver. |
-| **No unload** | there is no `dlclose`; modules are permanent. `dynamic-newlib` adds byte-exact undo (`patch_journal`) if you need it. |
+| **Manual unload** | `Module::unload()` exists and is byte-exact (journal revert + `.fini_array`), but it is not automatic: there is no `dlclose`-style reference counting, so you must call it yourself. |
 | **RAM buffers are manual** | you reserve the `ram_*[]` buffers yourself; `dynamic-newlib` uses the heap, `dynamic-nolib` an arena. |
 | **Exceptions/RTTI off** | the direct reference app compiles with `-fno-exceptions -fno-rtti` (C++ fixture still works for plain classes). |
 
@@ -1348,12 +1348,13 @@ C++ adds four extra rules, all in plain English:
   (`__cxa_*`, the personality routine, `__dynamic_cast`) and the loader
   registers the library's unwind tables (`.ARM.exidx`) so a `throw` inside the
   library can be caught by your program.
-- **Global objects are built, but not torn down.** A C++ global object with a
-  constructor runs when the library loads (that's the constructor story again).
-  But there is no reliable *destructor* at unload — the static loader runs
-  `.init_array` only, and `-fno-use-cxa-atexit` means "don't register my
-  destructor to run later." So write global objects that don't need a tidy
-  teardown.
+- **Global objects are built, and optionally torn down.** A C++ global object with
+  a constructor runs when the library loads (that's the constructor story again).
+  Its *destructor* runs only if you call `Module::unload()`, which walks
+  `.fini_array` in reverse. Keep in mind `-fno-use-cxa-atexit` means "don't
+  register my destructor to run later" — so teardown happens *only* through an
+  explicit `unload()`, never automatically. If you never unload, destructors
+  simply never run (which is fine for objects that need no tidy teardown).
 - **Function-local statics need `-fno-threadsafe-statics`.** A "magic static"
   (`static Foo f;` inside a function) normally gets hidden once-only
   initialization guards; on bare metal we turn those off, so such a static
@@ -1401,7 +1402,7 @@ callers are unaffected):
 
 | Improvement | API | Notes |
 |---|---|---|
-| **Unload** | `Module::unload()` | runs `.fini_array` in reverse, unpublishes the module's exports from the `symbol_table`, zeros the buffer, resets the module. |
+| **Byte-exact unload** | `Module::unload()` | runs `.fini_array` in reverse, **restores every word `patch_main` wrote into main's memory** (a patch journal, the `scl::static` twin of `dynamic-newlib`'s `patch_journal`), unpublishes the module's exports, zeros the buffer, resets the module. |
 | **Richer errors** | `last_detail()`, `last_error_string()` | exposes the fine-grained `loader_error` (`InvalidSegment`, `InvalidRelocation`, …) that `Module` previously collapsed into `LOAD_FAILED`. |
 | **Buffer sizing** | `Module::image_size(path)` | returns the exact byte count the loader needs, so callers stop guessing a fixed 32 KiB. |
 | **Dependency visibility** | `Module::dependencies()` | surfaces the `DT_NEEDED` sonames the library declares (the app still loads each one first). |
@@ -1416,7 +1417,6 @@ already lives in a sibling loader; porting them is a design decision, not a bug:
 
 | Gap | Where the machinery already exists |
 |---|---|
-| **Byte-exact unload** — reverting *main's* GOT slots that pointed at the module | `scl::dynamic-newlib`'s `patch_journal` (`src/dynamic-newlib/patch-journal.cpp`) |
 | **Lazy PLT binding** (patch GOT on first call) | `scl::dynamic-nolib`'s `lazy-resolve` / `lazy-plt` |
 | **Full DT_NEEDED auto-load** (open + load each dependency itself) | `shlib_loader::resolve_dependencies()` hook (`shlib-loader.cpp:274`) |
 | **Hard-float variant** | a config matter, not code — build fixture+firmware with `-mfloat-abi=hard` and matching `-mfpu` |
@@ -1424,9 +1424,11 @@ already lives in a sibling loader; porting them is a design decision, not a bug:
 | **Per-module visibility scopes** (RTLD_LOCAL vs RTLD_GLOBAL) | — |
 | **Reentrancy lock** for RTOS loads during calls | — |
 
-> **On `unload()`'s honesty:** it runs destructors and releases the library, but it
-> does **not** revert the addresses it wrote into *main's own* GOT slots. A later
-> call through those slots would jump into zeroed memory. To make `unload()` safe
-> against that, fold in the `patch_journal`; until then, treat `unload()` as "free
-> this module so I can load another into the same buffer" and re-load before any
-> further calls.
+> **How `unload()` stays honest now.** `patch_main` snapshots every word it is
+> about to overwrite into a journal (`patch_record { address, original }`,
+> `include/static/elf-reader.h`), and `unload()` replays it in reverse before
+> freeing the buffer — so after `unload()` the firmware is bit-identical to before
+> `load_file()`. This mirrors `scl::dynamic-newlib`'s `patch_journal`, but scoped
+> to *main's* writes only (the library's own buffer is freed, so its words need no
+> journal). The remaining caveat: `patch_shlib`'s writes into the library buffer are
+> not journaled — correct, because that buffer is discarded wholesale.

@@ -6,7 +6,7 @@
 #include <string_view>
 #include <vector>
 
-namespace elf_loader { class elf_reader; class symbol_table; enum class loader_error; }
+#include "static/elf-reader.h"
 
 namespace scl {
 
@@ -51,10 +51,9 @@ public:
     // --- teardown ---------------------------------------------------------
 
     /// Run the library's .fini_array destructors (reverse order), remove its
-    /// exports from the symbol table, zero the buffer and reset the module.
-    /// Note: main's GOT slots that pointed at this module's exports are NOT
-    /// reverted (that requires the patch_journal of scl::dynamic-newlib); do
-    /// not call into the library after unload() until it is re-loaded.
+    /// exports from the symbol table, restore every word it wrote into main's
+    /// memory (byte-exact, via the patch journal), zero the buffer and reset.
+    /// After unload() the firmware is bit-identical to before load_file().
     bool unload();
 
     // --- symbol access ----------------------------------------------------
@@ -106,6 +105,7 @@ private:
     elf_loader::symbol_table* syms_{nullptr};
     std::vector<std::string> exports_;   // names published into syms_ (for unload)
     std::vector<std::string> deps_;      // DT_NEEDED sonames
+    std::vector<elf_loader::patch_record> journal_;  // words written into main (for unload)
 };
 
 } // namespace scl

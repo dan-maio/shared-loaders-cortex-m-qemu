@@ -481,6 +481,12 @@ uint32_t shlib_loader::patch_main(symbol_table* global_syms) {
     // firmware image; still refuse a null or misaligned slot before writing.
     auto valid_slot = [](uint32_t a) { return a != 0 && (a & 3u) == 0; };
 
+    // Snapshot a word before it is overwritten, so unload can restore it.
+    auto journal = [&](uint32_t addr) {
+        main_journal_.push_back(
+            {addr, *reinterpret_cast<const uint32_t*>(addr)});
+    };
+
     for (uint32_t j = 0; j < main_patch_nbr; ++j) {
         const auto& m = main_sp[j];
         if (m.name.empty()) { ++skipped; continue; }
@@ -498,6 +504,7 @@ uint32_t shlib_loader::patch_main(symbol_table* global_syms) {
                 uint32_t val = resolve(m.name);
                 if (val && valid_slot(m.got_address)) {
                     auto* slot = reinterpret_cast<uint32_t*>(m.got_address);
+                    journal(m.got_address);
                     *slot = val;
                     if (global_syms) global_syms->set_global(m.name, val);
                     log_info("  %02u R_ARM_COPY %s -> %s  %.*s",
@@ -519,6 +526,7 @@ uint32_t shlib_loader::patch_main(symbol_table* global_syms) {
                 uint32_t val = resolve(m.name);
                 if (val && valid_slot(m.got_address)) {
                     auto* slot = reinterpret_cast<uint32_t*>(m.got_address);
+                    journal(m.got_address);
                     *slot = val;
                     if (global_syms) global_syms->set_global(m.name, val);
                     log_info("  %02u GLOBAL %s -> %s  %.*s",
@@ -539,6 +547,7 @@ uint32_t shlib_loader::patch_main(symbol_table* global_syms) {
             uint32_t val = resolve(m.name);
             if (val && valid_slot(m.got_address)) {
                 auto* slot = reinterpret_cast<uint32_t*>(m.got_address);
+                journal(m.got_address);
                 *slot = val;
                 if (global_syms) global_syms->set_global(m.name, val);
                 log_info("  %02u WEAK   %s -> %s  %.*s",

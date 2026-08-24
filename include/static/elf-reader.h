@@ -75,6 +75,14 @@ struct symbol_patch {
     uint8_t binding{0};
 };
 
+/// One word written into MAIN's memory during load (address + the value it held
+/// before the patch). Collected by patch_main so Module::unload can restore the
+/// firmware byte-for-byte.
+struct patch_record {
+    uint32_t address{0};
+    uint32_t original{0};
+};
+
 enum class loader_error {
     OK,
     FILE_NOT_FOUND,

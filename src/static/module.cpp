@@ -81,6 +81,7 @@ bool Module::build(elf_loader::elf_reader& efr,
 
     shl.patch_shlib(syms);
     shl.patch_main(syms);
+    journal_ = shl.take_journal();   // words written into main, for unload()
     delete[] sp_s;   // patch arrays live until patch_* consumed them
     delete[] sp_m;
     shl.execute_constructors();
@@ -126,12 +127,13 @@ void Module::reset() {
     syms_ = nullptr;
     exports_.clear();
     deps_.clear();
+    journal_.clear();
 }
 
 bool Module::unload() {
     if (!exec_buf_) return false;
 
-    // 1. Destructors first: the image and symbol table are still intact.
+    // 1. Destructors first: the image, symbol table and main's GOT are intact.
     if (fini_off_ && fini_sz_) {
         auto* arr = reinterpret_cast<const uint32_t*>(exec_buf_ + fini_off_);
         uint32_t n = fini_sz_ / static_cast<uint32_t>(sizeof(uint32_t));
@@ -142,12 +144,16 @@ bool Module::unload() {
         }
     }
 
-    // 2. Unpublish the exports this module registered.
+    // 2. Restore every word patch_main wrote into MAIN's memory (byte-exact).
+    for (auto it = journal_.rbegin(); it != journal_.rend(); ++it)
+        *reinterpret_cast<uint32_t*>(it->address) = it->original;
+
+    // 3. Unpublish the exports this module registered.
     if (syms_)
         for (const auto& n : exports_)
             syms_->remove(n);
 
-    // 3. Release the buffer.
+    // 4. Release the buffer.
     std::memset(exec_buf_, 0, exec_sz_);
     reset();
     err_ = module_error::OK;
