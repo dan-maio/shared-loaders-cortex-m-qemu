@@ -337,11 +337,13 @@ void scl_loader_lock();    void scl_loader_unlock();
 
 // TLS (multi-thread area model) — see static/tls.h:
 uint32_t scl_tls_register(const void* tdata, uint32_t tdata_sz, uint32_t tls_size);
+uint32_t scl_tls_module_id(uint32_t offset);     // DTV module id
 void     scl_tls_unregister(uint32_t offset);
 uint32_t scl_tls_area_size(void);
 void     scl_tls_init_area(void* area);
-void*    scl_tls_prepare(void);                 // single-thread convenience
-void     scl_tls_set_pointer(void* p);          // per-thread area base
+void*    scl_tls_get_addr(const void* tls_index);  // global-dynamic resolve
+void*    scl_tls_prepare(void);                    // single-thread convenience
+void     scl_tls_set_pointer(void* p);             // per-thread area base
 void*    scl_tls_get_pointer(void);
 ```
 
@@ -1430,7 +1432,7 @@ callers are unaffected):
 | **Visibility scopes** | `load_file(..., scope::LOCAL)` | `RTLD_LOCAL`/`RTLD_GLOBAL` — LOCAL keeps exports out of the shared `symbol_table`. |
 | **DT_NEEDED auto-load** | `load_file(..., dep_loader)` | a callback is invoked for each `DT_NEEDED` soname after a successful load. |
 | **Reentrancy lock** | `scl_loader_lock()` / `scl_loader_unlock()` | weak no-op hooks (override for an RTOS mutex or IRQ disable) serialising load/unload. |
-| **thread_local (TLS)** | `scl_tls_*`, `Module::tls_offset()`, `src/static/tls.c` | multi-thread-capable: each module gets a byte offset in a shared per-thread TLS area; native `R_ARM_TLS_*` relocations are applied, and `__emutls_*` (emulated TLS) works through ordinary relocations. On-target test in `test-static-direct` (`tls-lib`). |
+| **thread_local (TLS)** | `scl_tls_*`, `Module::tls_offset()`, `src/static/tls.c` | multi-thread-capable: each module gets a byte offset in a shared per-thread TLS area; native `R_ARM_TLS_*` relocations are applied (initial-exec **and** global-dynamic via `__tls_get_addr`), and `__emutls_*` (emulated TLS) works through ordinary relocations. On-target test in `test-static-direct` (`tls-lib`). |
 | **Richer errors** | `last_detail()`, `last_error_string()` | exposes the fine-grained `loader_error` (`InvalidSegment`, `InvalidRelocation`, …). |
 | **Buffer sizing** | `Module::image_size(path)` | returns the exact byte count the loader needs. |
 | **Faster lookup** | `Module::sym()` | SysV `.hash` walk when present, linear fallback (identical semantics). |
@@ -1444,7 +1446,6 @@ callers are unaffected):
 | **Lazy PLT binding** (patch GOT on first call) | **Deliberate non-goal.** `scl::static` resolves once at load by design; eager binding is both simpler and faster for pre-linked `.so` files (a handful of slots). The machinery exists in `scl::dynamic-nolib` (`lazy-resolve`, `lazy-plt`) for anyone who wants on-first-call binding — porting it here means adding a soft-float resolver trampoline and re-deriving the `-fPIC` PLT slot mapping, for a few microseconds of saved load time. |
 | **Hard-float variant** | Config, not code — build fixture+firmware with `-mfloat-abi=hard -mfpu=fpv4-sp-d16` and matching ABI on both sides; no loader change required (plain calls pass floats in `s0`, and the loader contains no VFP assembly). |
 | **Multiple concurrent loads of the same `.so`** | Not deduplicated; load the same file into separate buffers and they are independent modules. |
-| **Global-dynamic TLS** (`__tls_get_addr`) | Not implemented — native TLS support targets initial-exec (`-ftls-model=initial-exec`); the GD model would additionally need a per-module TLS descriptor table. |
 
 > **How `unload()` stays honest now.** `patch_main` snapshots every word it is
 > about to overwrite into a journal (`patch_record { address, original }`,
@@ -1465,7 +1466,11 @@ callers are unaffected):
 >
 > The **native TLS** path (`PT_TLS` segment + `R_ARM_TLS_TPOFF32/DTPOFF32/DTPMOD32`)
 > is also implemented for toolchains that emit it: the loader assigns each module a
-> byte offset in a shared per-thread area (`scl_tls_register`), bakes
-> `offset + st_value` into the GOT, and `scl_tls_init_area()`/`scl_tls_set_pointer()`
-> let an RTOS lay out one area per thread (`__aeabi_read_tp` returns the current
-> thread's base). It assumes `-mtp=soft` and "variant I" (thread pointer == area base).
+> byte offset in a shared per-thread area (`scl_tls_register`) and a DTV module id.
+> `R_ARM_TLS_TPOFF32` (initial-exec) bakes `area_offset + st_value` into the GOT;
+> `R_ARM_TLS_DTPMOD32/DTPOFF32` (global-dynamic) write the module id and the
+> within-block offset, and `__tls_get_addr` (weak, overridable) resolves
+> `{module, offset}` to `thread_ptr + area_offset[module] + offset`.
+> `scl_tls_init_area()`/`scl_tls_set_pointer()` let an RTOS lay out one area per
+> thread (`__aeabi_read_tp` returns the current thread's base). It assumes
+> `-mtp=soft` and "variant I" (thread pointer == area base).

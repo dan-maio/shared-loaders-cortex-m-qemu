@@ -120,8 +120,9 @@ loader_error shlib_loader::allocate_tls() {
         return loader_error::OUT_OF_MEMORY;
     }
     tls_offset_ = off;
-    log_info("registered TLS at area offset %s (+%u bytes)",
-             log::hex(off), unsigned(tls_size_));
+    tls_module_id_ = scl_tls_module_id(off);
+    log_info("registered TLS module %u at area offset %s (+%u bytes)",
+             unsigned(tls_module_id_), log::hex(off), unsigned(tls_size_));
     return loader_error::OK;
 }
 
@@ -375,8 +376,12 @@ uint32_t shlib_loader::patch_shlib(symbol_table* global_syms) {
 
         // ── TLS (thread-local) relocations — multi-thread area model ─────────
         // st_value is the symbol's offset within its module's TLS block; the GOT
-        // slot carries the addend. The thread pointer points at the per-thread
-        // area base, so the absolute offset is tls_offset + st_value.
+        // slot carries the addend.
+        //   TPOFF32  (initial-exec) : offset from the thread pointer (TP == area
+        //                             base) -> tls_offset + st_value.
+        //   DTPOFF32 (global-dynamic): offset within the module's block; the
+        //                             __tls_get_addr runtime adds the area offset.
+        //   DTPMOD32 (global-dynamic): the module's DTV id.
         if (s.type == R_ARM_TLS_TPOFF32 ||
             s.type == R_ARM_TLS_DTPOFF32 ||
             s.type == R_ARM_TLS_DTPMOD32) {
@@ -386,9 +391,11 @@ uint32_t shlib_loader::patch_shlib(symbol_table* global_syms) {
             }
             auto* slot = reinterpret_cast<uint32_t*>(&buffer[go]);
             if (s.type == R_ARM_TLS_DTPMOD32) {
-                *slot = 0;                          // module id (GD not supported)
+                *slot = tls_module_id_;                     // DTV module id
+            } else if (s.type == R_ARM_TLS_TPOFF32) {
+                *slot += tls_offset_ + s.virtual_address;   // offset from TP
             } else {
-                *slot += tls_offset_ + s.virtual_address;   // DTPOFF32 / TPOFF32
+                *slot += s.virtual_address;                 // DTPOFF32: within block
             }
             log_info("  %02u TLS    %s -> %s  %.*s",
                       j, log::hex(uintptr_t(slot)), log::hex(*slot),

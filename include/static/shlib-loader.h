@@ -77,7 +77,6 @@ public:
 
     /// This module's byte offset within a thread's TLS area (0 if no TLS).
     uint32_t tls_offset() const { return tls_offset_; }
-
     unsigned int resolve_weak_function(funcm f);
 
     loader_error resolve_dependencies(symbol_table* global_syms,
@@ -105,6 +104,7 @@ private:
     std::vector<patch_record> main_journal_{};
     bool publish_{true};
     uint32_t tls_offset_{0};
+    uint32_t tls_module_id_{0};
     uint32_t tls_size_{0};
     uint32_t tls_filesz_{0};
     uint32_t tls_data_off_{0};

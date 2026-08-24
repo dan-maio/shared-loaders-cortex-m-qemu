@@ -54,6 +54,12 @@ uint32_t scl_tls_register(const void* tdata, uint32_t tdata_sz, uint32_t tls_siz
     return off;
 }
 
+uint32_t scl_tls_module_id(uint32_t offset) {
+    for (uint32_t i = 0; i < g_count; ++i)
+        if (g_mods[i].offset == offset) return i;   // array index == DTV module id
+    return UINT32_MAX;
+}
+
 void scl_tls_unregister(uint32_t offset) {
     for (uint32_t i = 0; i < g_count; ++i) {
         if (g_mods[i].offset == offset) {
@@ -96,4 +102,15 @@ void* scl_tls_prepare(void) {
 void scl_tls_set_pointer(void* p) { g_thread_ptr = p; }
 void* scl_tls_get_pointer(void)   { return g_thread_ptr; }
 
+void* scl_tls_get_addr(const void* tls_index) {
+    const uint32_t* ti = (const uint32_t*)tls_index;
+    const uint32_t module = ti[0];   // ti_module (filled by R_ARM_TLS_DTPMOD32)
+    const uint32_t offset = ti[1];   // ti_offset (filled by R_ARM_TLS_DTPOFF32)
+    if (!g_thread_ptr || module >= g_count) return 0;
+    // Variant I: TP == area base; the module's block lives at its area offset.
+    return (uint8_t*)g_thread_ptr + g_mods[module].offset + offset;
+}
+
 __attribute__((weak)) void* __aeabi_read_tp(void) { return g_thread_ptr; }
+
+__attribute__((weak)) void* __tls_get_addr(const void* ti) { return scl_tls_get_addr(ti); }

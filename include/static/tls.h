@@ -26,9 +26,16 @@ extern "C" {
 /// Returns UINT32_MAX on failure (no slots / OOM).
 uint32_t scl_tls_register(const void* tdata, uint32_t tdata_sz, uint32_t tls_size);
 
+/// Module id (DTV index) for a previously registered @p offset, or UINT32_MAX.
+uint32_t scl_tls_module_id(uint32_t offset);
+
 /// Drop a module's TLS template (its offset stays reserved — like a real loader,
 /// offsets are never reclaimed because they are baked into the GOT).
 void scl_tls_unregister(uint32_t offset);
+
+/// Resolve a global-dynamic tls_index { module, offset } for the current thread.
+/// This is the `__tls_get_addr` used by the global-dynamic access model.
+void* scl_tls_get_addr(const void* tls_index);
 
 /// Total size of a thread's TLS area (sum of all reserved modules).
 uint32_t scl_tls_area_size(void);
