@@ -165,5 +165,6 @@ int main() {
     fw::dlclose(*h);
     trace_puts("\n==== Demo complete ====\n");
     trace_puts((fixup_ok && result_ok) ? "RESULT: ALL PASS\n" : "RESULT: SOME FAILED\n");
+    semihost_exit(0);
     for (;;);
 }

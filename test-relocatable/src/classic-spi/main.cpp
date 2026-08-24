@@ -383,5 +383,6 @@ int main(void) {
     log_info("xxx()=%u", xxx());
 
     trace_puts("\n==== classic-spi demo complete ====\n");
+    semihost_exit(0);
     for (;;);
 }

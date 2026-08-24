@@ -218,5 +218,6 @@ int main() {
     xip_walkthrough_complex();
 
     trace_printf("\nscl-fw-xip-static-direct: done\n");
+    exit(0);
     for (;;) { }
 }

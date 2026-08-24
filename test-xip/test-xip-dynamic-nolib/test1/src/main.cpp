@@ -17,6 +17,7 @@
 #include "xip/relocate.hpp"
 #include "dynamic-nolib/dl.hpp"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #ifndef DL_LIB_DIR
@@ -215,5 +216,6 @@ int main() {
     xip_walkthrough_complex();
 
     trace_printf("\nscl-fw-xip-nolib1: done\n");
+    exit(0);
     for (;;) { }
 }

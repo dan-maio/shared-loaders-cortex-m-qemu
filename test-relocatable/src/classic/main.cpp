@@ -699,5 +699,6 @@ int main(void) {
     for (auto& led : blink_leds) led.turn_on();
     tmr.sleep(timer::FREQUENCY_HZ);
 
+    semihost_exit(0);
     for (;;);
 }

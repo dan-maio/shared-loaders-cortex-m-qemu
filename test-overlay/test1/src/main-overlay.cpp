@@ -323,5 +323,6 @@ int main() {
     trace_puts(g_fail == 0 ? " PASS ==\n" : " (FAILURES) ==\n");
     trace_puts("overlay: done\n");
 
+    semihost_exit(0);
     for (;;) { led_toggle(); delay_ms(500); }
 }

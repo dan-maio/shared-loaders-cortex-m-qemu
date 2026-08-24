@@ -10,6 +10,7 @@
 #include "xip/static/adapter.hpp"
 #include "timer.h"
 #include "led.h"
+#include <cstdlib>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -452,6 +453,7 @@ int main() {
     xip_walkthrough_complex();
 
     trace_printf("\nscl-fw-xip-interrupt-static: regular tests done; entering WFI loop...\n");
+    exit(0);
 
     // Loop indefinitely to keep blinking the LED via dynamically patched TIM2 interrupts
     for (;;) {

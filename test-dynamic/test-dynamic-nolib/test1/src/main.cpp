@@ -169,5 +169,6 @@ int main() {
     } else { trace_puts("dlopen libcppeh FAILED\n"); }
 
     trace_puts("f411re-dynloader 4b: done\n");
+    semihost_exit(0);
     for (;;) { led_toggle(); delay_ms(500); }
 }

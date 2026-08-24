@@ -284,5 +284,6 @@ int main(int argc, char* argv[]) {
     }
 
     printf("Done. Halting.\n");
+    exit(0);
     for (;;);
 }

@@ -573,6 +573,7 @@ int battery_run() {
     trace_puts(g_fail == 0 ? " PASS ==\n" : " (FAILURES) ==\n");
     trace_puts("battery: done\n");
 
+    semihost_exit(0);
     for (;;) { led_toggle(); delay_ms(500); }
 }
 

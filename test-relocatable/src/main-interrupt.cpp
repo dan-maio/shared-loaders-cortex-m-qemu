@@ -629,6 +629,7 @@ int main() {
     trace_puts(g_fail == 0 ? "RESULT: ALL PASS\n" : "RESULT: SOME FAILED\n");
     
     trace_puts("\nscl-fw-reloc-interrupt: regular tests done; entering WFI loop...\n");
+    semihost_exit(0);
     for (;;) {
         __asm__ volatile ("wfi");
     }

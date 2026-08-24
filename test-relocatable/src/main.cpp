@@ -343,5 +343,6 @@ int main() {
     trace_u32("", static_cast<std::uint32_t>(g_fail));
     trace_puts("  failed ====\n");
     trace_puts(g_fail == 0 ? "RESULT: ALL PASS\n" : "RESULT: SOME FAILED\n");
+    semihost_exit(0);
     for (;;);
 }

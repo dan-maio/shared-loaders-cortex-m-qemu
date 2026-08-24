@@ -33,6 +33,11 @@ int  semihost_close(int handle);
  *         The host sets it via OpenOCD: `arm semihosting_cmdline <args...>`. */
 int  semihost_get_cmdline(char* buf, int len);
 
+/** @brief Terminate the semihosting session (SYS_EXIT) with @p code, so the
+ *         debugger/QEMU stops cleanly instead of spinning. Does not return; if
+ *         the host ignores SYS_EXIT it spins forever as a fallback. */
+void semihost_exit(int code);
+
 #if defined(__cplusplus)
 }
 #endif

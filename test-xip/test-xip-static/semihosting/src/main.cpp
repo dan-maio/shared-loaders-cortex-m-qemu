@@ -25,6 +25,7 @@
 #include "scl/pic-trampoline.h"
 #include "xip/static/adapter.hpp"
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <span>
@@ -282,6 +283,7 @@ int main() {
     xip_walkthrough_complex();
 
     trace_printf("\nscl-fw-xip-static: done\n");
+    exit(0);
     for (;;) { }
 }
 
