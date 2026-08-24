@@ -299,17 +299,25 @@ mod1["cppsh_make"](7);      // operator[] + call functor; plain lookup at call s
 ```cpp
 namespace scl {
 enum class module_error { OK, FILE_NOT_FOUND, NOT_AN_ELF, NO_DYNSYM, LOAD_FAILED };
+enum class scope      { GLOBAL, LOCAL };                       // RTLD_GLOBAL / RTLD_LOCAL
+using dep_loader = bool (*)(const char* soname);               // DT_NEEDED auto-load hook
 
 class Module {
 public:
     bool load_file(const char* path, uint8_t* exec_buf, uint32_t exec_sz,
-                   elf_loader::symbol_table* syms);           // from semihosting file
+                   elf_loader::symbol_table* syms,
+                   scope s = scope::GLOBAL, dep_loader load_dep = nullptr);
     bool load_buf(const uint8_t* raw, uint32_t rawsz,
                   uint8_t* exec_buf, uint32_t exec_sz,
-                  elf_loader::symbol_table* syms);            // from a raw buffer
+                  elf_loader::symbol_table* syms,
+                  scope s = scope::GLOBAL, dep_loader load_dep = nullptr);
 
     static uint32_t image_size(const char* path);             // buffer size needed (0 on error)
-    bool unload();                                            // byte-exact revert + .fini_array + unpublish + free
+
+    void   retain();                                          // +1 reference
+    void   release();                                         // -1; tear down at 0
+    void   unload();                                          // == release(); idempotent
+    uint32_t refcount() const;
 
     void* sym(const char* name) const;                        // name -> address (hash-accelerated)
     template<typename T> T sym(const char* name) const;       // typed cast helper
@@ -320,8 +328,13 @@ public:
     const char* last_error_string() const;                    // "InvalidSegment", ...
     bool        loaded() const;                               // true once loaded
     const std::vector<std::string>& dependencies() const;     // DT_NEEDED sonames
+    uint8_t*    tls_base() const;                             // module TLS block (== thread ptr)
 };
 }
+
+// Weak reentrancy hooks (override in an RTOS app):
+void scl_loader_lock();    void scl_loader_unlock();
+void scl_tls_set_pointer(void*);  void* scl_tls_get_pointer(void);
 ```
 
 ### 7.2 `elf_loader::elf_reader` — parse + enumerate (`include/static/elf-reader.h`)
@@ -472,7 +485,7 @@ You *can* reduce it to a one-liner per library and tuck the buffer sizes behind
 | **Build-time linking** | the *which library* decision is made by `-lsh1 …`, not by a free-form runtime path. (The `.so` is still read from a file at run time — only the *symbol binding* is pre-linked.) |
 | **Soft-float ABI** | fixtures and firmware share `-mfloat-abi=soft`. Hard-float belongs to the `dynamic-*`/XIP loaders. |
 | **No lazy binding** | every GOT slot is patched eagerly at load; there is no on-first-call PLT resolver. |
-| **Manual unload** | `Module::unload()` exists and is byte-exact (journal revert + `.fini_array`), but it is not automatic: there is no `dlclose`-style reference counting, so you must call it yourself. |
+| **Manual unload** | `Module::unload()` is byte-exact (journal revert + `.fini_array`) and reference-counted (`retain`/`release`), but still explicit: nothing unloads automatically at scope exit (the destructor tears down as a safety net). |
 | **RAM buffers are manual** | you reserve the `ram_*[]` buffers yourself; `dynamic-newlib` uses the heap, `dynamic-nolib` an arena. |
 | **Exceptions/RTTI off** | the direct reference app compiles with `-fno-exceptions -fno-rtti` (C++ fixture still works for plain classes). |
 
@@ -657,6 +670,7 @@ code; they matter when you extend the loader:
 | XIP adapter (two-base model) | `include/xip/static/adapter.hpp`, `src/xip/static/adapter.cpp` |
 | XIP reference app (direct) | `test-xip/test-xip-static-direct/src/main.cpp` |
 | XIP fixture flags (r10) | `test/fixtures-src/c1/c1.h` |
+| TLS thread pointer | `include/static/tls.h`, `src/static/tls.c` |
 | ELF32 parser (shared) | `common-elf-reader/include/loader/*`, `src/elf-image.cpp` |
 | Full loader taxonomy | `doc/manual-scl-loaders.md`, `doc/scl-guide.md` |
 | Migration rationale | `doc/scl-analysis-and-migration-plan.md` |
@@ -1402,27 +1416,26 @@ callers are unaffected):
 
 | Improvement | API | Notes |
 |---|---|---|
-| **Byte-exact unload** | `Module::unload()` | runs `.fini_array` in reverse, **restores every word `patch_main` wrote into main's memory** (a patch journal, the `scl::static` twin of `dynamic-newlib`'s `patch_journal`), unpublishes the module's exports, zeros the buffer, resets the module. |
-| **Richer errors** | `last_detail()`, `last_error_string()` | exposes the fine-grained `loader_error` (`InvalidSegment`, `InvalidRelocation`, …) that `Module` previously collapsed into `LOAD_FAILED`. |
-| **Buffer sizing** | `Module::image_size(path)` | returns the exact byte count the loader needs, so callers stop guessing a fixed 32 KiB. |
-| **Dependency visibility** | `Module::dependencies()` | surfaces the `DT_NEEDED` sonames the library declares (the app still loads each one first). |
-| **Faster lookup** | `Module::sym()` | now walks the SysV `.hash` table when present, with the original linear scan as fallback (identical semantics). |
-| **Leak fix** | — | `Module::build()` now frees the temporary patch arrays (previously leaked per load). |
-| **Export tracking** | `symbol_table::remove()` | new removal primitive so `unload()` can unpublish exactly what a module registered. |
+| **Byte-exact unload** | `Module::unload()` / `release()` | runs `.fini_array` in reverse, **restores every word `patch_main` wrote into main's memory** (patch journal), unpublishes exports, frees the TLS block, zeros the buffer. |
+| **Reference counting** | `retain()` / `release()` / `refcount()` | `unload()` is idempotent; the module tears down only when the refcount reaches 0. |
+| **Visibility scopes** | `load_file(..., scope::LOCAL)` | `RTLD_LOCAL`/`RTLD_GLOBAL` — LOCAL keeps exports out of the shared `symbol_table`. |
+| **DT_NEEDED auto-load** | `load_file(..., dep_loader)` | a callback is invoked for each `DT_NEEDED` soname after a successful load. |
+| **Reentrancy lock** | `scl_loader_lock()` / `scl_loader_unlock()` | weak no-op hooks (override for an RTOS mutex or IRQ disable) serialising load/unload. |
+| **thread_local (single-thread)** | `Module::tls_base()`, `src/static/tls.c` | allocates the module's PT_TLS block, applies `R_ARM_TLS_*` relocations, publishes the thread pointer via `__aeabi_read_tp`. |
+| **Richer errors** | `last_detail()`, `last_error_string()` | exposes the fine-grained `loader_error` (`InvalidSegment`, `InvalidRelocation`, …). |
+| **Buffer sizing** | `Module::image_size(path)` | returns the exact byte count the loader needs. |
+| **Faster lookup** | `Module::sym()` | SysV `.hash` walk when present, linear fallback (identical semantics). |
+| **Leak fix** | `~Module()` | the temporary patch arrays are freed; the destructor tears down an un-unloaded module (no TLS leak). |
+| **Export tracking** | `symbol_table::remove()` | lets `unload()` unpublish exactly what a module registered. |
 
-### 21.2 Still open (intentional, larger design work)
+### 21.2 Still open (intentional)
 
-These remain unimplemented because they change behaviour or need machinery that
-already lives in a sibling loader; porting them is a design decision, not a bug:
-
-| Gap | Where the machinery already exists |
+| Gap | Status |
 |---|---|
-| **Lazy PLT binding** (patch GOT on first call) | `scl::dynamic-nolib`'s `lazy-resolve` / `lazy-plt` |
-| **Full DT_NEEDED auto-load** (open + load each dependency itself) | `shlib_loader::resolve_dependencies()` hook (`shlib-loader.cpp:274`) |
-| **Hard-float variant** | a config matter, not code — build fixture+firmware with `-mfloat-abi=hard` and matching `-mfpu` |
-| **Multiple instances / reference counting** of the same `.so` | — |
-| **Per-module visibility scopes** (RTLD_LOCAL vs RTLD_GLOBAL) | — |
-| **Reentrancy lock** for RTOS loads during calls | — |
+| **Lazy PLT binding** (patch GOT on first call) | **Deliberate non-goal.** `scl::static` resolves once at load by design; eager binding is both simpler and faster for pre-linked `.so` files (a handful of slots). The machinery exists in `scl::dynamic-nolib` (`lazy-resolve`, `lazy-plt`) for anyone who wants on-first-call binding — porting it here means adding a soft-float resolver trampoline and re-deriving the `-fPIC` PLT slot mapping, for a few microseconds of saved load time. |
+| **Hard-float variant** | Config, not code — build fixture+firmware with `-mfloat-abi=hard -mfpu=fpv4-sp-d16` and matching ABI on both sides; no loader change required (plain calls pass floats in `s0`). |
+| **Multi-thread TLS** | The TLS support above is single-thread (one global thread pointer). A multi-thread RTOS app overrides `__aeabi_read_tp`/`scl_tls_set_pointer` and allocates one TLS block per thread. |
+| **Multiple concurrent loads of the same `.so`** | Not deduplicated; load the same file into separate buffers and they are independent modules. |
 
 > **How `unload()` stays honest now.** `patch_main` snapshots every word it is
 > about to overwrite into a journal (`patch_record { address, original }`,
@@ -1432,3 +1445,10 @@ already lives in a sibling loader; porting them is a design decision, not a bug:
 > to *main's* writes only (the library's own buffer is freed, so its words need no
 > journal). The remaining caveat: `patch_shlib`'s writes into the library buffer are
 > not journaled — correct, because that buffer is discarded wholesale.
+
+> **On thread_local.** The TLS support assumes `-mtp=soft` (the ARM default, where
+> every TLS access calls `__aeabi_read_tp`) and the "variant I" convention (thread
+> pointer == block base). Build the fixture with `-ftls-model=initial-exec` so its
+> `thread_local` accesses resolve to `TP + offset` with a `R_ARM_TLS_TPOFF32`
+> relocation; one TLS-using module active at a time. A global-dynamic model would
+> additionally need `__tls_get_addr` and a per-module TLS descriptor table.

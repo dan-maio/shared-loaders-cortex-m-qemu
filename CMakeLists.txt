@@ -114,6 +114,7 @@ if(SCL_TARGET_ARM)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/static/shlib-loader.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/static/logger.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/static/module.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/static/tls.c
     )
     target_include_directories(scl-static INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/include

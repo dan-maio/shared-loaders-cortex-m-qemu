@@ -16,8 +16,10 @@
 #include "static/shlib-loader.h"
 #include "scl/barrier.h"
 #include "static/logger.h"
+#include "static/tls.h"
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 extern uint32_t _reloc;
 
@@ -78,6 +80,13 @@ loader_error shlib_loader::load_bin(uint8_t* buffer, uint32_t bufsize) {
                    unsigned(i), ptype, log::hex(ph.p_vaddr),
                    unsigned(ph.p_filesz), unsigned(ph.p_memsz), perm);
 
+        if (ph.p_type == PT_TLS) {
+            has_tls_      = true;
+            tls_size_     = ph.p_memsz;
+            tls_filesz_   = ph.p_filesz;
+            tls_data_off_ = ph.p_offset;
+        }
+
         loader_error err = efr_.load_segments({buffer, needed}, ph);
         if (err != loader_error::OK) {
             log_error("segment %u load failed", unsigned(i));
@@ -89,6 +98,30 @@ loader_error shlib_loader::load_bin(uint8_t* buffer, uint32_t bufsize) {
     dependencies_.clear();
     efr_.scan_dependencies(dependencies_);
 
+    return loader_error::OK;
+}
+
+loader_error shlib_loader::allocate_tls() {
+    if (!has_tls_ || tls_size_ == 0) return loader_error::OK;
+    if (tls_base_) return loader_error::OK;   // already allocated
+
+    auto* blk = new (std::nothrow) uint8_t[tls_size_];
+    if (!blk) return loader_error::OUT_OF_MEMORY;
+
+    // PT_TLS: the file image (p_filesz bytes) is the .tdata; the rest is .tbss.
+    if (tls_filesz_) {
+        if (efr_.read_image_data(tls_data_off_, {blk, tls_filesz_}) != loader_error::OK) {
+            delete[] blk;
+            return loader_error::INVALID_SEGMENT;
+        }
+    }
+    if (tls_size_ > tls_filesz_)
+        std::memset(blk + tls_filesz_, 0, tls_size_ - tls_filesz_);
+
+    tls_base_ = blk;
+    scl_tls_set_pointer(tls_base_);   // publish as the (single) thread pointer
+    log_info("allocated TLS block %s + %u bytes",
+             log::hex(uintptr_t(tls_base_)), unsigned(tls_size_));
     return loader_error::OK;
 }
 
@@ -340,6 +373,30 @@ uint32_t shlib_loader::patch_shlib(symbol_table* global_syms) {
 
         if (s.name.empty()) { ++skipped; continue; }
 
+        // ── TLS (thread-local) relocations — single-thread model ────────────
+        // st_value of a TLS symbol is its offset within the module's TLS block;
+        // the GOT slot carries the addend. The thread pointer is set to the
+        // block base (variant I), so the slot holds the plain offset.
+        if (s.type == R_ARM_TLS_TPOFF32 ||
+            s.type == R_ARM_TLS_DTPOFF32 ||
+            s.type == R_ARM_TLS_DTPMOD32) {
+            if (!in_image(go)) {
+                log_warn("  %02u TLS offset %s outside image", j, log::hex(go));
+                ++skipped; continue;
+            }
+            auto* slot = reinterpret_cast<uint32_t*>(&buffer[go]);
+            if (s.type == R_ARM_TLS_DTPMOD32) {
+                *slot = 0;                          // single module -> module id 0
+            } else {
+                *slot += s.virtual_address;         // DTPOFF32 / TPOFF32 offset
+            }
+            log_info("  %02u TLS    %s -> %s  %.*s",
+                      j, log::hex(uintptr_t(slot)), log::hex(*slot),
+                      int(s.name.size()), s.name.data());
+            ++patched;
+            continue;
+        }
+
         // ── R_ARM_ABS32 — absolute pointer (e.g. .init_array entries) ──────
         // Handled for any binding (a local ABS32 was previously dropped).
         if (s.type == R_ARM_ABS32) {
@@ -418,7 +475,7 @@ uint32_t shlib_loader::patch_shlib(symbol_table* global_syms) {
         }
 
         // Register exported (self-defined) symbols for cross-module interposition.
-        if (global_syms && (s.binding == STB_GLOBAL || s.binding == STB_WEAK) && s.virtual_address) {
+        if (publish_ && global_syms && (s.binding == STB_GLOBAL || s.binding == STB_WEAK) && s.virtual_address) {
             uint32_t ra = s.virtual_address + uintptr_t(buffer);
             if (s.binding == STB_WEAK)
                 global_syms->add_weak(s.name, ra);
@@ -429,7 +486,7 @@ uint32_t shlib_loader::patch_shlib(symbol_table* global_syms) {
 
     // If no exports were added from .rel.dyn (e.g. simple .so without relocations),
     // scan .dynsym directly to register exported symbols.
-    if (global_syms && patched == 0) {
+    if (publish_ && global_syms && patched == 0) {
         auto si = uint32_t(helper_section_idx::DYN_SYM);
         auto st = uint32_t(helper_section_idx::DYN_STR);
         auto* sym_data = m_shlib[si].address;
@@ -506,7 +563,7 @@ uint32_t shlib_loader::patch_main(symbol_table* global_syms) {
                     auto* slot = reinterpret_cast<uint32_t*>(m.got_address);
                     journal(m.got_address);
                     *slot = val;
-                    if (global_syms) global_syms->set_global(m.name, val);
+                    if (publish_ && global_syms) global_syms->set_global(m.name, val);
                     log_info("  %02u R_ARM_COPY %s -> %s  %.*s",
                               j, log::hex(m.got_address), log::hex(val),
                               int(m.name.size()), m.name.data());
@@ -528,7 +585,7 @@ uint32_t shlib_loader::patch_main(symbol_table* global_syms) {
                     auto* slot = reinterpret_cast<uint32_t*>(m.got_address);
                     journal(m.got_address);
                     *slot = val;
-                    if (global_syms) global_syms->set_global(m.name, val);
+                    if (publish_ && global_syms) global_syms->set_global(m.name, val);
                     log_info("  %02u GLOBAL %s -> %s  %.*s",
                               j, log::hex(m.got_address), log::hex(val),
                               int(m.name.size()), m.name.data());

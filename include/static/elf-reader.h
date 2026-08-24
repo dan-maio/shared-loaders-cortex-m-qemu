@@ -159,6 +159,10 @@ public:
     void read_section_header(uint32_t nbr, Elf32_Shdr& shdr);
     loader_error read_section_content(uint32_t nbr, std::span<uint8_t> dest);
 
+    // Read @p dest bytes from the raw file/buffer at @p file_offset (used to copy
+    // the PT_TLS .tdata image into a freshly allocated TLS block).
+    loader_error read_image_data(uint32_t file_offset, std::span<uint8_t> dest);
+
     uint32_t get_binary_size();
     uint32_t find_section_by_name(std::string_view name);
     uint32_t find_program(uint16_t type);

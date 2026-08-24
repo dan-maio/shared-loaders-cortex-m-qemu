@@ -1,34 +1,52 @@
 #include "static/module.h"
 #include "static/elf-reader.h"
 #include "static/shlib-loader.h"
+#include "static/tls.h"
 #include "loader/detail/elf-hash.hpp"
 #include "loader/elf-types.hpp"
 #include <cstring>
 #include <new>
 
+// Weak no-op reentrancy hooks; an RTOS app overrides these with strong versions
+// (e.g. a mutex, or __disable_irq/__enable_irq) to serialize load/unload.
+extern "C" {
+__attribute__((weak)) void scl_loader_lock() {}
+__attribute__((weak)) void scl_loader_unlock() {}
+}
+
 namespace scl {
 
 bool Module::load_file(const char* path, uint8_t* buf, uint32_t bufsz,
-                       elf_loader::symbol_table* syms) {
+                       elf_loader::symbol_table* syms,
+                       scope s, dep_loader load_dep) {
+    scl_loader_lock();
     elf_loader::elf_reader efr;
     if (!efr.open_elf(path)) {
         err_ = module_error::FILE_NOT_FOUND;
         err_detail_ = static_cast<int>(efr.error);
+        scl_loader_unlock();
         return false;
     }
-    return build(efr, buf, bufsz, syms);
+    bool ok = build(efr, buf, bufsz, syms, s, load_dep);
+    scl_loader_unlock();
+    return ok;
 }
 
 bool Module::load_buf(const uint8_t* raw, uint32_t rawsz,
                       uint8_t* buf, uint32_t bufsz,
-                      elf_loader::symbol_table* syms) {
+                      elf_loader::symbol_table* syms,
+                      scope s, dep_loader load_dep) {
+    scl_loader_lock();
     elf_loader::elf_reader efr;
     if (!efr.open_buf(raw, rawsz)) {
         err_ = module_error::NOT_AN_ELF;
         err_detail_ = static_cast<int>(efr.error);
+        scl_loader_unlock();
         return false;
     }
-    return build(efr, buf, bufsz, syms);
+    bool ok = build(efr, buf, bufsz, syms, s, load_dep);
+    scl_loader_unlock();
+    return ok;
 }
 
 std::uint32_t Module::image_size(const char* path) {
@@ -39,7 +57,8 @@ std::uint32_t Module::image_size(const char* path) {
 
 bool Module::build(elf_loader::elf_reader& efr,
                    uint8_t* buf, uint32_t bufsz,
-                   elf_loader::symbol_table* syms) {
+                   elf_loader::symbol_table* syms,
+                   scope s, dep_loader load_dep) {
     uint32_t sym_sec = efr.find_section_by_name(".dynsym");
     uint32_t str_sec = efr.find_section_by_name(".dynstr");
     if (sym_sec >= 0xFFFF || str_sec >= 0xFFFF) {
@@ -69,6 +88,7 @@ bool Module::build(elf_loader::elf_reader& efr,
     // Full patching: library side + main side (for direct GOT calls).
     elf_loader::symbol_patch* sp_s = nullptr;
     elf_loader::symbol_patch* sp_m = nullptr;
+    shl.set_publish(s == scope::GLOBAL);   // RTLD_LOCAL hides exports
     if (shl.populate_helper_sections() == elf_loader::loader_error::OK) {
         uint32_t ns = shl.get_shlib_patch_count();
         uint32_t nm = shl.get_main_patch_count();
@@ -84,6 +104,13 @@ bool Module::build(elf_loader::elf_reader& efr,
     journal_ = shl.take_journal();   // words written into main, for unload()
     delete[] sp_s;   // patch arrays live until patch_* consumed them
     delete[] sp_m;
+
+    // TLS: allocate the block and publish the thread pointer BEFORE running
+    // constructors (a constructor may read thread_local data).
+    shl.allocate_tls();
+    tls_base_ = shl.tls_base();
+    tls_size_ = shl.tls_size();
+
     shl.execute_constructors();
 
     exec_buf_ = buf;
@@ -102,7 +129,7 @@ bool Module::build(elf_loader::elf_reader& efr,
     // Record which exports we published so unload() can unpublish them. This
     // matches what patch_shlib() registered: GLOBAL/WEAK defined symbols.
     exports_.clear();
-    if (syms_) {
+    if (s == scope::GLOBAL && syms_) {
         const char* strtab = reinterpret_cast<const char*>(exec_buf_ + dynstr_off_);
         auto* entries = reinterpret_cast<const Elf32_Sym*>(exec_buf_ + dynsym_off_);
         uint32_t n = dynsym_sz_ / static_cast<uint32_t>(sizeof(Elf32_Sym));
@@ -116,6 +143,13 @@ bool Module::build(elf_loader::elf_reader& efr,
 
     err_ = module_error::OK;
     err_detail_ = 0;
+    refs_ = 1;
+
+    // Auto-load DT_NEEDED dependencies (app-owned storage + cycle handling).
+    if (load_dep) {
+        for (const auto& d : deps_)
+            load_dep(d.c_str());
+    }
     return true;
 }
 
@@ -128,10 +162,15 @@ void Module::reset() {
     exports_.clear();
     deps_.clear();
     journal_.clear();
+    tls_base_ = nullptr;
+    tls_size_ = 0;
 }
 
-bool Module::unload() {
-    if (!exec_buf_) return false;
+Module::~Module() { teardown(); }
+
+void Module::teardown() {
+    if (!exec_buf_) return;
+    scl_loader_lock();
 
     // 1. Destructors first: the image, symbol table and main's GOT are intact.
     if (fini_off_ && fini_sz_) {
@@ -153,12 +192,21 @@ bool Module::unload() {
         for (const auto& n : exports_)
             syms_->remove(n);
 
-    // 4. Release the buffer.
+    // 4. Release the TLS block (before the buffer, so dtors in 1 already ran).
+    if (tls_base_) {
+        scl_tls_set_pointer(nullptr);
+        delete[] tls_base_;
+        tls_base_ = nullptr;
+        tls_size_ = 0;
+    }
+
+    // 5. Release the buffer.
     std::memset(exec_buf_, 0, exec_sz_);
     reset();
     err_ = module_error::OK;
     err_detail_ = 0;
-    return true;
+    refs_ = 0;
+    scl_loader_unlock();
 }
 
 void* Module::sym(const char* name) const {

@@ -261,6 +261,12 @@ void elf_reader::read_at_offset(std::span<uint8_t> dest, uint32_t offset) {
     }
 }
 
+loader_error elf_reader::read_image_data(uint32_t file_offset, std::span<uint8_t> dest) {
+    error = loader_error::OK;
+    read_at_offset(dest, file_offset);
+    return error;
+}
+
 uint32_t elf_reader::get_binary_size() {
     if (elf_size_) return elf_size_;
     if (!img_) return 0;
