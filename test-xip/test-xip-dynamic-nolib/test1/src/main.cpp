@@ -216,6 +216,6 @@ int main() {
     xip_walkthrough_complex();
 
     trace_printf("\nscl-fw-xip-nolib1: done\n");
-    exit(0);
+    std::exit(0);
     for (;;) { }
 }

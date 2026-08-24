@@ -370,7 +370,7 @@ int main() {
     xip_walkthrough_complex();
 
     trace_printf("\nscl-fw-xip-interrupt1: regular tests done; entering WFI loop...\n");
-    exit(0);
+    std::exit(0);
 
     // Loop indefinitely to keep blinking the LED via SysTick interrupts
     for (;;) {

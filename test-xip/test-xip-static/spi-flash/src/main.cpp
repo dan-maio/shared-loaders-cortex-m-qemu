@@ -322,6 +322,6 @@ int main() {
     test_cpp_features();
 
     trace_puts("\n========== DONE ==========\n");
-    exit(0);
+    std::exit(0);
     for (;;) {}
 }
