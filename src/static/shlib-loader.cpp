@@ -103,25 +103,25 @@ loader_error shlib_loader::load_bin(uint8_t* buffer, uint32_t bufsize) {
 
 loader_error shlib_loader::allocate_tls() {
     if (!has_tls_ || tls_size_ == 0) return loader_error::OK;
-    if (tls_base_) return loader_error::OK;   // already allocated
+    if (tls_offset_) return loader_error::OK;   // already registered
 
-    auto* blk = new (std::nothrow) uint8_t[tls_size_];
-    if (!blk) return loader_error::OUT_OF_MEMORY;
-
-    // PT_TLS: the file image (p_filesz bytes) is the .tdata; the rest is .tbss.
+    // Copy the .tdata image out of the file/buffer into a heap template.
+    std::vector<uint8_t> tdata(tls_filesz_);
     if (tls_filesz_) {
-        if (efr_.read_image_data(tls_data_off_, {blk, tls_filesz_}) != loader_error::OK) {
-            delete[] blk;
+        if (efr_.read_image_data(tls_data_off_,
+                                 {tdata.data(), tls_filesz_}) != loader_error::OK)
             return loader_error::INVALID_SEGMENT;
-        }
     }
-    if (tls_size_ > tls_filesz_)
-        std::memset(blk + tls_filesz_, 0, tls_size_ - tls_filesz_);
 
-    tls_base_ = blk;
-    scl_tls_set_pointer(tls_base_);   // publish as the (single) thread pointer
-    log_info("allocated TLS block %s + %u bytes",
-             log::hex(uintptr_t(tls_base_)), unsigned(tls_size_));
+    uint32_t off = scl_tls_register(tdata.empty() ? nullptr : tdata.data(),
+                                    tls_filesz_, tls_size_);
+    if (off == UINT32_MAX) {
+        log_error("TLS register failed (no slots / OOM)");
+        return loader_error::OUT_OF_MEMORY;
+    }
+    tls_offset_ = off;
+    log_info("registered TLS at area offset %s (+%u bytes)",
+             log::hex(off), unsigned(tls_size_));
     return loader_error::OK;
 }
 
@@ -373,10 +373,10 @@ uint32_t shlib_loader::patch_shlib(symbol_table* global_syms) {
 
         if (s.name.empty()) { ++skipped; continue; }
 
-        // ── TLS (thread-local) relocations — single-thread model ────────────
-        // st_value of a TLS symbol is its offset within the module's TLS block;
-        // the GOT slot carries the addend. The thread pointer is set to the
-        // block base (variant I), so the slot holds the plain offset.
+        // ── TLS (thread-local) relocations — multi-thread area model ─────────
+        // st_value is the symbol's offset within its module's TLS block; the GOT
+        // slot carries the addend. The thread pointer points at the per-thread
+        // area base, so the absolute offset is tls_offset + st_value.
         if (s.type == R_ARM_TLS_TPOFF32 ||
             s.type == R_ARM_TLS_DTPOFF32 ||
             s.type == R_ARM_TLS_DTPMOD32) {
@@ -386,9 +386,9 @@ uint32_t shlib_loader::patch_shlib(symbol_table* global_syms) {
             }
             auto* slot = reinterpret_cast<uint32_t*>(&buffer[go]);
             if (s.type == R_ARM_TLS_DTPMOD32) {
-                *slot = 0;                          // single module -> module id 0
+                *slot = 0;                          // module id (GD not supported)
             } else {
-                *slot += s.virtual_address;         // DTPOFF32 / TPOFF32 offset
+                *slot += tls_offset_ + s.virtual_address;   // DTPOFF32 / TPOFF32
             }
             log_info("  %02u TLS    %s -> %s  %.*s",
                       j, log::hex(uintptr_t(slot)), log::hex(*slot),

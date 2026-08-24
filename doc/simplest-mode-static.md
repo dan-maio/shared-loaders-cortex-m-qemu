@@ -328,13 +328,21 @@ public:
     const char* last_error_string() const;                    // "InvalidSegment", ...
     bool        loaded() const;                               // true once loaded
     const std::vector<std::string>& dependencies() const;     // DT_NEEDED sonames
-    uint8_t*    tls_base() const;                             // module TLS block (== thread ptr)
+    uint32_t    tls_offset() const;                           // module offset in the TLS area
 };
 }
 
 // Weak reentrancy hooks (override in an RTOS app):
 void scl_loader_lock();    void scl_loader_unlock();
-void scl_tls_set_pointer(void*);  void* scl_tls_get_pointer(void);
+
+// TLS (multi-thread area model) — see static/tls.h:
+uint32_t scl_tls_register(const void* tdata, uint32_t tdata_sz, uint32_t tls_size);
+void     scl_tls_unregister(uint32_t offset);
+uint32_t scl_tls_area_size(void);
+void     scl_tls_init_area(void* area);
+void*    scl_tls_prepare(void);                 // single-thread convenience
+void     scl_tls_set_pointer(void* p);          // per-thread area base
+void*    scl_tls_get_pointer(void);
 ```
 
 ### 7.2 `elf_loader::elf_reader` — parse + enumerate (`include/static/elf-reader.h`)
@@ -671,6 +679,7 @@ code; they matter when you extend the loader:
 | XIP reference app (direct) | `test-xip/test-xip-static-direct/src/main.cpp` |
 | XIP fixture flags (r10) | `test/fixtures-src/c1/c1.h` |
 | TLS thread pointer | `include/static/tls.h`, `src/static/tls.c` |
+| On-target TLS fixture | `test-static/test-static/tls-lib/tls_lib.{c,h}` (loaded by `test-static-direct`) |
 | ELF32 parser (shared) | `common-elf-reader/include/loader/*`, `src/elf-image.cpp` |
 | Full loader taxonomy | `doc/manual-scl-loaders.md`, `doc/scl-guide.md` |
 | Migration rationale | `doc/scl-analysis-and-migration-plan.md` |
@@ -1398,7 +1407,7 @@ C++ adds four extra rules, all in plain English:
 | "put the library somewhere" | reserve a buffer + `load_file()` |
 | "keep my symbol table" | don't use `-s`/`--strip-all` |
 | "link it so plain calls compile" | `-lmylib1` + `--no-dynamic-linker` |
-| "no TLS" | don't use `thread_local` |
+| "thread_local works" | `__thread` → emulated TLS (`__emutls_*`), ordinary relocations (§21) |
 
 If you remember nothing else: **the library must be position-independent and
 explicit about what it borrows; your program must provide and keep-alive every
@@ -1421,7 +1430,7 @@ callers are unaffected):
 | **Visibility scopes** | `load_file(..., scope::LOCAL)` | `RTLD_LOCAL`/`RTLD_GLOBAL` — LOCAL keeps exports out of the shared `symbol_table`. |
 | **DT_NEEDED auto-load** | `load_file(..., dep_loader)` | a callback is invoked for each `DT_NEEDED` soname after a successful load. |
 | **Reentrancy lock** | `scl_loader_lock()` / `scl_loader_unlock()` | weak no-op hooks (override for an RTOS mutex or IRQ disable) serialising load/unload. |
-| **thread_local (single-thread)** | `Module::tls_base()`, `src/static/tls.c` | allocates the module's PT_TLS block, applies `R_ARM_TLS_*` relocations, publishes the thread pointer via `__aeabi_read_tp`. |
+| **thread_local (TLS)** | `scl_tls_*`, `Module::tls_offset()`, `src/static/tls.c` | multi-thread-capable: each module gets a byte offset in a shared per-thread TLS area; native `R_ARM_TLS_*` relocations are applied, and `__emutls_*` (emulated TLS) works through ordinary relocations. On-target test in `test-static-direct` (`tls-lib`). |
 | **Richer errors** | `last_detail()`, `last_error_string()` | exposes the fine-grained `loader_error` (`InvalidSegment`, `InvalidRelocation`, …). |
 | **Buffer sizing** | `Module::image_size(path)` | returns the exact byte count the loader needs. |
 | **Faster lookup** | `Module::sym()` | SysV `.hash` walk when present, linear fallback (identical semantics). |
@@ -1433,9 +1442,9 @@ callers are unaffected):
 | Gap | Status |
 |---|---|
 | **Lazy PLT binding** (patch GOT on first call) | **Deliberate non-goal.** `scl::static` resolves once at load by design; eager binding is both simpler and faster for pre-linked `.so` files (a handful of slots). The machinery exists in `scl::dynamic-nolib` (`lazy-resolve`, `lazy-plt`) for anyone who wants on-first-call binding — porting it here means adding a soft-float resolver trampoline and re-deriving the `-fPIC` PLT slot mapping, for a few microseconds of saved load time. |
-| **Hard-float variant** | Config, not code — build fixture+firmware with `-mfloat-abi=hard -mfpu=fpv4-sp-d16` and matching ABI on both sides; no loader change required (plain calls pass floats in `s0`). |
-| **Multi-thread TLS** | The TLS support above is single-thread (one global thread pointer). A multi-thread RTOS app overrides `__aeabi_read_tp`/`scl_tls_set_pointer` and allocates one TLS block per thread. |
+| **Hard-float variant** | Config, not code — build fixture+firmware with `-mfloat-abi=hard -mfpu=fpv4-sp-d16` and matching ABI on both sides; no loader change required (plain calls pass floats in `s0`, and the loader contains no VFP assembly). |
 | **Multiple concurrent loads of the same `.so`** | Not deduplicated; load the same file into separate buffers and they are independent modules. |
+| **Global-dynamic TLS** (`__tls_get_addr`) | Not implemented — native TLS support targets initial-exec (`-ftls-model=initial-exec`); the GD model would additionally need a per-module TLS descriptor table. |
 
 > **How `unload()` stays honest now.** `patch_main` snapshots every word it is
 > about to overwrite into a journal (`patch_record { address, original }`,
@@ -1446,9 +1455,17 @@ callers are unaffected):
 > journal). The remaining caveat: `patch_shlib`'s writes into the library buffer are
 > not journaled — correct, because that buffer is discarded wholesale.
 
-> **On thread_local.** The TLS support assumes `-mtp=soft` (the ARM default, where
-> every TLS access calls `__aeabi_read_tp`) and the "variant I" convention (thread
-> pointer == block base). Build the fixture with `-ftls-model=initial-exec` so its
-> `thread_local` accesses resolve to `TP + offset` with a `R_ARM_TLS_TPOFF32`
-> relocation; one TLS-using module active at a time. A global-dynamic model would
-> additionally need `__tls_get_addr` and a per-module TLS descriptor table.
+> **On thread_local — two mechanisms.** On `arm-none-eabi` GCC 15, `__thread`/
+> `thread_local` lowers to **emulated TLS** (`__emutls_v.<name>` control structs +
+> a call to `__emutls_get_address` from libgcc) — *not* native PT_TLS. That path
+> needs nothing special from the loader: the control structs are ordinary
+> GLOB_DAT/RELATIVE relocations and `__emutls_get_address` is either self-contained
+> in the `.so` (built with `-nostartfiles`) or a JUMP_SLOT resolved from main. The
+> on-target test (`test-static/test-static-direct/tls-lib`) exercises exactly this.
+>
+> The **native TLS** path (`PT_TLS` segment + `R_ARM_TLS_TPOFF32/DTPOFF32/DTPMOD32`)
+> is also implemented for toolchains that emit it: the loader assigns each module a
+> byte offset in a shared per-thread area (`scl_tls_register`), bakes
+> `offset + st_value` into the GOT, and `scl_tls_init_area()`/`scl_tls_set_pointer()`
+> let an RTOS lay out one area per thread (`__aeabi_read_tp` returns the current
+> thread's base). It assumes `-mtp=soft` and "variant I" (thread pointer == area base).

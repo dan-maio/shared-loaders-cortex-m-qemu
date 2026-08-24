@@ -122,8 +122,8 @@ public:
     /// DT_NEEDED sonames this library declares.
     const std::vector<std::string>& dependencies() const { return deps_; }
 
-    /// Base of the module's TLS block (== thread pointer), or nullptr if none.
-    uint8_t* tls_base() const { return tls_base_; }
+    /// This module's byte offset within a thread's TLS area (0 if no TLS).
+    uint32_t tls_offset() const { return tls_offset_; }
 
 private:
     bool build(elf_loader::elf_reader& efr,
@@ -143,8 +143,7 @@ private:
     std::vector<std::string> exports_;   // names published into syms_ (for unload)
     std::vector<std::string> deps_;      // DT_NEEDED sonames
     std::vector<elf_loader::patch_record> journal_;  // words written into main (for unload)
-    uint8_t* tls_base_{nullptr};
-    uint32_t tls_size_{0};
+    uint32_t tls_offset_{0};
     uint32_t refs_{0};
 };
 

@@ -16,6 +16,7 @@
 #include "mylib1.h"
 #include "mylib2.h"
 #include "cpp_features.h"
+#include "tls_lib.h"
 
 // ── Board-specific LED configuration ──────────────────────────────────────
 namespace {
@@ -140,6 +141,7 @@ void test_structured_error_strings();
 alignas(8) static uint8_t ram_sh1[32768];
 alignas(8) static uint8_t ram_sh2[32768];
 alignas(8) static uint8_t ram_cpp[32768];
+alignas(8) static uint8_t ram_tls[8192];
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -193,6 +195,30 @@ void test_structured_error_strings() {
                            elf_loader::loader_error_string(loader_error::FILE_NOT_FOUND));
     log_info("  %-20s → \"%s\"", "NotAnElf",
                            elf_loader::loader_error_string(loader_error::NOT_AN_ELF));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Test: thread_local (emulated TLS) via a loaded .so
+// ═══════════════════════════════════════════════════════════════════════════
+void test_tls() {
+    log_info("TEST: thread_local (emulated TLS)");
+    scl::Module mod_tls;
+    if (!mod_tls.load_file("tls-lib/libtls_lib.so", ram_tls, sizeof ram_tls,
+                           &g_global_syms)) {
+        log_error("  load tls-lib/libtls_lib.so FAILED: %s",
+                  mod_tls.last_error_string());
+        return;
+    }
+    // __thread -> emulated TLS: tls_get/tls_bump resolve __emutls_v.* (GLOB_DAT)
+    // and __emutls_get_address (self-contained in the .so via libgcc).
+    int a = tls_get();    // 100 (initialised thread-local)
+    int b = tls_bump();   // 107
+    int c = tls_get();    // 107
+    int z = tls_zero();   // 1
+    log_info("  tls_get()=%d tls_bump()=%d tls_get()=%d tls_zero()=%d  (expect 100,107,107,1)",
+             a, b, c, z);
+    log_info("  %s", (a == 100 && b == 107 && c == 107 && z == 1)
+                     ? "TLS PASS" : "TLS FAIL");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -254,6 +280,7 @@ int main(int argc, char* argv[]) {
     test_structured_error_strings();
     test_symbol_table(g_global_syms);
     test_bounds_validation();
+    test_tls();
 
     // ── Verify Direct Calls to loaded libraries ───────────────────────
     log_info("=== VERIFY DIRECT API CALLS ===");

@@ -75,6 +75,7 @@ endfunction()
 
 add_shlib(sh1 libsh1 mylib1)
 add_shlib(sh2 libsh2 mylib2)
+add_shlib(tls_lib tls-lib tls_lib)
 
 # C++ features shared library
 set(CPP_FEATURES_SO "${APP_DIR}/new-lib/libcpp_features.so")
@@ -134,7 +135,7 @@ set(CXX_SRCS
 
 add_executable(scl-fw-static-direct ${C_SRCS} ${CXX_SRCS})
 set_target_properties(scl-fw-static-direct PROPERTIES SUFFIX ".elf")
-add_dependencies(scl-fw-static-direct sh1 sh2 cpp_features)
+add_dependencies(scl-fw-static-direct sh1 sh2 tls_lib cpp_features)
 
 target_include_directories(scl-fw-static-direct PRIVATE
     src
@@ -144,6 +145,7 @@ target_include_directories(scl-fw-static-direct PRIVATE
     ${ST}/system/include/stm32f4-hal
     ${ST}/libsh1
     ${ST}/libsh2
+    ${ST}/tls-lib
     ${ST_CPP}/new-lib)
 
 # The loader (elf_reader/shlib_loader/logger) + the common-elf-reader parser
@@ -168,8 +170,8 @@ target_link_options(scl-fw-static-direct PRIVATE
     -T${ST}/ldscripts/sections-sh.ld
     -nostartfiles -Wl,--gc-sections --specs=nano.specs -u _printf_float
     -Wl,--no-dynamic-linker -Wl,--no-warn-rwx-segments
-    -L${APP_DIR}/libsh1 -L${APP_DIR}/libsh2 -L${APP_DIR}/new-lib
-    -lsh1 -lsh2 -lcpp_features -lstdc++)
+    -L${APP_DIR}/libsh1 -L${APP_DIR}/libsh2 -L${APP_DIR}/tls-lib -L${APP_DIR}/new-lib
+    -lsh1 -lsh2 -ltls_lib -lcpp_features -lstdc++ -lgcc)
 
 add_custom_command(TARGET scl-fw-static-direct POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:scl-fw-static-direct> $<TARGET_FILE_DIR:scl-fw-static-direct>/scl-fw-static-direct.hex

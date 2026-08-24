@@ -99,18 +99,16 @@ bool Module::build(elf_loader::elf_reader& efr,
         shl.find_main_symbols_to_patch({sp_m, nm});
     }
 
+    // TLS: register the template and reserve the area offset BEFORE patch_shlib
+    // (which bakes `tls_offset + st_value` into the GOT). Also before ctors.
+    shl.allocate_tls();
+    tls_offset_ = shl.tls_offset();
+
     shl.patch_shlib(syms);
     shl.patch_main(syms);
     journal_ = shl.take_journal();   // words written into main, for unload()
     delete[] sp_s;   // patch arrays live until patch_* consumed them
     delete[] sp_m;
-
-    // TLS: allocate the block and publish the thread pointer BEFORE running
-    // constructors (a constructor may read thread_local data).
-    shl.allocate_tls();
-    tls_base_ = shl.tls_base();
-    tls_size_ = shl.tls_size();
-
     shl.execute_constructors();
 
     exec_buf_ = buf;
@@ -162,8 +160,7 @@ void Module::reset() {
     exports_.clear();
     deps_.clear();
     journal_.clear();
-    tls_base_ = nullptr;
-    tls_size_ = 0;
+    tls_offset_ = 0;
 }
 
 Module::~Module() { teardown(); }
@@ -192,13 +189,9 @@ void Module::teardown() {
         for (const auto& n : exports_)
             syms_->remove(n);
 
-    // 4. Release the TLS block (before the buffer, so dtors in 1 already ran).
-    if (tls_base_) {
-        scl_tls_set_pointer(nullptr);
-        delete[] tls_base_;
-        tls_base_ = nullptr;
-        tls_size_ = 0;
-    }
+    // 4. Release the TLS template (offset stays reserved, like a real loader).
+    if (tls_offset_)
+        scl_tls_unregister(tls_offset_);
 
     // 5. Release the buffer.
     std::memset(exec_buf_, 0, exec_sz_);

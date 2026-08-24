@@ -69,14 +69,14 @@ public:
     /// this library's exports into the shared symbol_table.
     void set_publish(bool p) { publish_ = p; }
 
-    /// Allocate the module's TLS block (single-thread model): copies .tdata,
-    /// zeroes .tbss, and publishes the base via scl_tls_set_pointer(). No-op if
-    /// the image has no PT_TLS segment. Returns OK (or OUT_OF_MEMORY).
+    /// Register this module's TLS template and reserve its offset in the shared
+    /// per-thread TLS area (multi-thread model). No-op if the image has no PT_TLS
+    /// segment. Must be called BEFORE patch_shlib() (which bakes the offset into
+    /// the GOT). Returns OK (or OUT_OF_MEMORY).
     loader_error allocate_tls();
 
-    /// Base of the module's TLS block (nullptr if none), == the thread pointer.
-    uint8_t* tls_base() const { return tls_base_; }
-    uint32_t tls_size() const { return tls_size_; }
+    /// This module's byte offset within a thread's TLS area (0 if no TLS).
+    uint32_t tls_offset() const { return tls_offset_; }
 
     unsigned int resolve_weak_function(funcm f);
 
@@ -104,7 +104,7 @@ private:
     std::vector<std::string> dependencies_{};
     std::vector<patch_record> main_journal_{};
     bool publish_{true};
-    uint8_t* tls_base_{nullptr};
+    uint32_t tls_offset_{0};
     uint32_t tls_size_{0};
     uint32_t tls_filesz_{0};
     uint32_t tls_data_off_{0};
