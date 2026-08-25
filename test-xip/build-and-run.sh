@@ -29,6 +29,8 @@ declare -A TARGETS=(
   [static/semihosting]="scl-fw-xip-static-semihosting:test-xip-static/semihosting"
   [static/spi-flash]="scl-fw-xip-static-spi-flash:test-xip-static/spi-flash"
   [static-direct]="scl-fw-xip-static-direct:test-xip-static-direct"
+  [static-no-pic]="scl-fw-xip-static-no-pic:test-xip-static-no-pic"
+  [static-no-pic-simple]="scl-fw-xip-static-no-pic-simple:test-xip-static-no-pic-simple"
   [interrupt-static]="scl-fw-xip-interrupt-static:test-xip-interrupt-static"
   [interrupt-static-direct]="scl-fw-xip-interrupt-static-direct:test-xip-interrupt-static-direct"
 )
@@ -42,6 +44,8 @@ run_args_qemu() {
         interrupt)              RUN_ARGS_ARR=(--done "regular tests done") ;;
         static/semihosting)     RUN_ARGS_ARR=(--done "scl-fw-xip-static: done") ;;
         static-direct)          RUN_ARGS_ARR=(--done "scl-fw-xip-static-direct: done") ;;
+        static-no-pic)          RUN_ARGS_ARR=(--done "scl-fw-xip-static-no-pic: done") ;;
+        static-no-pic-simple)   RUN_ARGS_ARR=(--done "scl-fw-xip-static-no-pic-simple: done") ;;
         interrupt-static)       RUN_ARGS_ARR=(--done "regular tests done") ;;
         interrupt-static-direct) RUN_ARGS_ARR=(--done "regular tests done") ;;
     esac
@@ -103,6 +107,12 @@ echo "=== build XIP fixtures (split, single-pic-base) ==="
 "$HERE/fixtures-src/build-fixtures.sh"
 if [ "$TARGET" = "static/semihosting" ] || [ "$TARGET" = "static-direct" ] || [ "$TARGET" = "interrupt-static" ] || [ "$TARGET" = "interrupt-static-direct" ]; then
     "$HERE/test-xip-static/semihosting/fixtures-src/build.sh"
+fi
+if [ "$TARGET" = "static-no-pic" ]; then
+    "$HERE/test-xip-static-no-pic/fixtures-src/build.sh"
+fi
+if [ "$TARGET" = "static-no-pic-simple" ]; then
+    "$HERE/test-xip-static-no-pic-simple/fixtures-src/build.sh"
 fi
 
 echo "=== configure ==="

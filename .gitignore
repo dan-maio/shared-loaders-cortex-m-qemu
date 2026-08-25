@@ -22,3 +22,7 @@ tools/gen-symtab
 
 # Claude Code per-machine settings (permissions etc.) — not shared
 .claude/settings.local.json
+
+# no-pic XIP test: per-app fixture build output (built by fixtures-src/build.sh)
+test-xip/test-xip-static-no-pic/fixtures/
+test-xip/test-xip-static-no-pic-simple/fixtures/
