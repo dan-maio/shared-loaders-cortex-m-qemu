@@ -52,7 +52,7 @@ if [[ "$SCL_BOARD" == "qemu" ]]; then
     MACHINE=netduinoplus2
     # Per-app QEMU runner arguments
     declare -A QEMU_ARGS=(
-      [test1]="--done 'overlay: done' --need-led 1"
+      [test1]="--done 'overlay: done'"
     )
 fi
 

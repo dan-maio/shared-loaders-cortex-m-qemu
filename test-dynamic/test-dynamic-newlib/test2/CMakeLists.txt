@@ -83,8 +83,11 @@ string(TOUPPER "${SCL_PLATFORM}" _SCL_PLATFORM_UPPER)
 string(REPLACE "-" "_" _SCL_PLATFORM_VAR "${_SCL_PLATFORM_UPPER}")
 set(_runner "${PLATFORM_${_SCL_PLATFORM_VAR}_HOSTED_RUNNER}")
 if(_runner)
+    # QEMU run: stage the .so fixtures into /tmp (hardcoded dlopen paths) first.
     add_test(NAME scl-fw-dynamic-newlib2
-             COMMAND ${_runner} --machine ${PLATFORM_${_SCL_PLATFORM_VAR}_HOSTED_QEMU_MACHINE}
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../../test/tools/qemu-run-with-tmp-fixtures.sh
+                     ${STATIC_UNIFY_DIR}/libs/build$<$<BOOL:${SCL_HF}>:_hf>
+                     --machine ${PLATFORM_${_SCL_PLATFORM_VAR}_HOSTED_QEMU_MACHINE}
                      --done "ALL OK" $<TARGET_FILE:scl-fw-dynamic-newlib2>
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 else()

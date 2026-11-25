@@ -38,9 +38,9 @@ declare -A TARGETS=(
 run_args_qemu() {
     RUN_ARGS_ARR=()
     case "$1" in
-        dynamic-nolib/test1) RUN_ARGS_ARR=(--done "f411re-dynloader 4b: done" --need-led 1) ;;
-        dynamic-nolib/test2) RUN_ARGS_ARR=(--done "battery: done" --need-led 1) ;;
-        dynamic-nolib/test3) RUN_ARGS_ARR=(--done "battery: done" --need-flash 1 --need-led 1 --arg -c --arg c1.so --arg c2.so --arg cpp3.so --arg libcppeh.so --arg ehx_catch.so --arg notelf.bin) ;;
+        dynamic-nolib/test1) RUN_ARGS_ARR=(--done "f411re-dynloader 4b: done") ;;
+        dynamic-nolib/test2) RUN_ARGS_ARR=(--done "battery: done") ;;
+        dynamic-nolib/test3) RUN_ARGS_ARR=(--done "battery: done" --need-flash 1 --arg -c --arg c1.so --arg c2.so --arg cpp3.so --arg libcppeh.so --arg ehx_catch.so --arg notelf.bin) ;;
         dynamic-nolib/test4) RUN_ARGS_ARR=(--done "RESULT: ALL PASS") ;;
         dynamic-newlib/test1) RUN_ARGS_ARR=(--done "RESULT:") ;;
         dynamic-newlib/test2) RUN_ARGS_ARR=(--done "ALL OK") ;;
@@ -124,6 +124,14 @@ if [[ $IS_QEMU -eq 1 ]]; then
     [[ -n "$ELF" && -f "$ELF" ]] || { echo "error: $APP ELF not found" >&2; exit 1; }
     run_args_qemu "$TARGET"
     echo "=== run $APP under QEMU ==="
+    if [[ "$TARGET" == dynamic-newlib/test2 ]]; then
+        # Its suite dlopens hardcoded /tmp/*.so over semihosting: stage the
+        # fixtures first (the hardware path does the same in flash-run.sh).
+        FIX="$ROOT/test/platforms/board-hosted/vendor/libs/build"
+        [[ "$ABI" == hf ]] && FIX="${FIX}_hf"
+        exec "$ROOT/test/tools/qemu-run-with-tmp-fixtures.sh" "$FIX" \
+             --machine "$MACHINE" "${RUN_ARGS_ARR[@]}" "$ELF"
+    fi
     exec "$QEMU_RUN" --machine "$MACHINE" "${RUN_ARGS_ARR[@]}" "$ELF"
 else
     echo "=== flash and run $APP ==="

@@ -138,7 +138,6 @@ int main(int argc, char* argv[]) {
     trace_printf("  g_cross(7) = %u (expected 367)\n", gc);
 #endif
 
+    trace_puts(ok ? "ALL OK — blink" : "FAIL — LED off");
     exit(ok ? 0 : 1);
-    if (ok) { trace_puts("ALL OK — blink"); for (;;) { board_led.toggle(); timer::sleep(500); } }
-    else    { trace_puts("FAIL — LED off"); board_led.turn_off(); for (;;); }
 }

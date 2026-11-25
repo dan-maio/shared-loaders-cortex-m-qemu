@@ -7,7 +7,11 @@
 
 /** @brief ARM semihosting operation numbers (the r0 value passed to BKPT 0xAB). */
 enum { SYS_OPEN = 0x01, SYS_CLOSE = 0x02, SYS_WRITEC = 0x03, SYS_WRITE0 = 0x04,
-       SYS_READ = 0x06, SYS_SEEK = 0x0A, SYS_FLEN = 0x0C, SYS_GET_CMDLINE = 0x15 };
+       SYS_READ = 0x06, SYS_SEEK = 0x0A, SYS_FLEN = 0x0C, SYS_GET_CMDLINE = 0x15,
+       SYS_EXIT = 0x18 };
+
+/* SYS_EXIT reason code: normal application exit (vs a runtime error). */
+enum { ADP_STOPPED_APPLICATION_EXIT = 0x20026 };
 
 /** @brief Issue one semihosting call: r0=op, r1=arg, returns r0. */
 static inline uintptr_t semihost_call(uintptr_t op, uintptr_t arg)
@@ -69,4 +73,11 @@ int semihost_get_cmdline(char* buf, int len)
     if (n < 0 || n >= len) n = len - 1;   /* clamp to buffer */
     buf[n] = '\0';                         /* ensure NUL-terminated */
     return n;
+}
+
+void semihost_exit(int code)
+{
+    uint32_t args[2] = { ADP_STOPPED_APPLICATION_EXIT, (uint32_t) code };
+    semihost_call(SYS_EXIT, (uintptr_t) args);
+    for (;;) { }   /* host ignored SYS_EXIT; never return into a dead frame */
 }
