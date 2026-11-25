@@ -124,6 +124,14 @@ if [[ $IS_QEMU -eq 1 ]]; then
     [[ -n "$ELF" && -f "$ELF" ]] || { echo "error: $APP ELF not found" >&2; exit 1; }
     run_args_qemu "$TARGET"
     echo "=== run $APP under QEMU ==="
+    if [[ "$TARGET" == dynamic-newlib/test2 ]]; then
+        # Its suite dlopens hardcoded /tmp/*.so over semihosting: stage the
+        # fixtures first (the hardware path does the same in flash-run.sh).
+        FIX="$ROOT/test/platforms/board-hosted/vendor/libs/build"
+        [[ "$ABI" == hf ]] && FIX="${FIX}_hf"
+        exec "$ROOT/test/tools/qemu-run-with-tmp-fixtures.sh" "$FIX" \
+             --machine "$MACHINE" "${RUN_ARGS_ARR[@]}" "$ELF"
+    fi
     exec "$QEMU_RUN" --machine "$MACHINE" "${RUN_ARGS_ARR[@]}" "$ELF"
 else
     echo "=== flash and run $APP ==="
